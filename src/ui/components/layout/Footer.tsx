@@ -1,5 +1,6 @@
 // src/ui/components/layout/Footer.tsx
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { theme } from '../../styles/theme';
 
 export const Footer: React.FC = () => (
@@ -11,6 +12,20 @@ export const Footer: React.FC = () => (
       <span style={{ color: theme.colors.red }}>PERÚ</span>
     </div>
     <p style={{ fontSize: '0.88rem', marginBottom: 4 }}>Solución Financiera del Perú</p>
+    
+    {/* Legal links */}
+    <div style={{ marginBottom: 16, fontSize: '0.8rem' }}>
+      <Link to="/politica-privacidad" style={{ color: 'rgba(255,255,255,0.65)', textDecoration: 'none', marginRight: 16 }}>
+        Política de Privacidad
+      </Link>
+      <Link to="/terminos-servicio" style={{ color: 'rgba(255,255,255,0.65)', textDecoration: 'none', marginRight: 16 }}>
+        Términos de Servicio
+      </Link>
+      <Link to="/eliminar-datos" style={{ color: 'rgba(255,255,255,0.65)', textDecoration: 'none' }}>
+        Eliminar Datos
+      </Link>
+    </div>
+    
     <p style={{ fontSize: '0.78rem' }}>© {new Date().getFullYear()} SOLFIN Perú. Todos los derechos reservados.</p>
   </footer>
 );

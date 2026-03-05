@@ -1,5 +1,6 @@
 // src/ui/components/layout/Navbar.tsx
 import React, { useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { theme } from '../../styles/theme';
 import { useScrolled } from '../../hooks/useScrolled';
 
@@ -17,9 +18,19 @@ const NAV_LINKS = [
 export const Navbar: React.FC<Props> = ({ whatsappUrl }) => {
   const scrolled = useScrolled();
   const [open, setOpen] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const isHome = location.pathname === '/';
 
   const scrollTo = (id: string) => {
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
+    if (!isHome) {
+      navigate('/');
+      setTimeout(() => {
+        document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+    } else {
+      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
+    }
     setOpen(false);
   };
 
@@ -36,18 +47,18 @@ export const Navbar: React.FC<Props> = ({ whatsappUrl }) => {
         height: 68,
       }}>
         {/* Logo */}
-        <button
-          onClick={() => scrollTo('inicio')}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-          aria-label="Ir al inicio"
+        <Link
+          to="/"
+          style={{ textDecoration: 'none' }}
+          onClick={() => setOpen(false)}
         >
-          <span style={{ fontFamily: theme.fonts.display, fontSize: '1.55rem', fontWeight: 700, letterSpacing: '0.03em' }}>
+          <span style={{ fontFamily: theme.fonts.display, fontSize: '1.55rem', fontWeight: 700, letterSpacing: '0.03em', cursor: 'pointer' }}>
             <span style={{ color: theme.colors.yellow }}>SOL</span>
             <span style={{ color: '#1b4ea1'}}>FIN</span>
             {' '}
             <span style={{ color: theme.colors.red }}>PERÚ</span>
           </span>
-        </button>
+        </Link>
 
         {/* Desktop links */}
         <div style={{ display: 'flex', gap: 32, alignItems: 'center' }} className="desktop-nav">
