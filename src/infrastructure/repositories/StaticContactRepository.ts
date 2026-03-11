@@ -5,8 +5,8 @@ import { ContactInfo } from '../../domain/entities/ContactInfo';
 import { IContactRepository } from '../../domain/ports/output/IContactRepository';
 
 const CONTACT_INFO: ContactInfo = {
-  phone: '+51980732693',
-  whatsappUrl: 'https://wa.me/51980732693',
+  phone: '+51986366302',
+  whatsappUrl: 'https://wa.me/51986366302',
   address: 'Asoc. Nery García Mzn. Ñ Lote 2',
   addressDetail: 'A 1 cuadra del Mercado Nery',
   city: 'Ayacucho',

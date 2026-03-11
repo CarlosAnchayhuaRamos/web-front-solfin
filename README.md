@@ -87,4 +87,4 @@ Para conectar una API real, solo necesitas:
 | yellow  | `#fcf12e` | Acento      |
 
 ## 📞 Contacto
-WhatsApp: +51 980 732 693
+WhatsApp: +51 986 366 302
