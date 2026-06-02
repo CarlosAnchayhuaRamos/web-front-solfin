@@ -1,0 +1,580 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  ANALYST
+  CASHIER
+  VIEWER
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  SUSPENDED
+  INACTIVE
+}
+
+enum ClientStatus {
+  ACTIVE
+  WATCHLIST
+  BLOCKED
+  INACTIVE
+}
+
+enum CreditType {
+  EXPRESS
+  GARANTIA
+}
+
+enum CreditStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  ACTIVE
+  PAID
+  OVERDUE
+  DEFAULTED
+  CANCELED
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELED
+}
+
+enum PaymentStatus {
+  PENDING
+  PARTIAL
+  PAID
+  OVERDUE
+  CANCELED
+}
+
+enum PaymentMethod {
+  CASH
+  TRANSFER
+  YAPE
+  PLIN
+  CARD
+  OTHER
+}
+
+enum DocumentType {
+  DNI
+  VOUCHER
+  CONTRACT
+  GUARANTEE
+  PHOTO
+  OTHER
+}
+
+enum StorageProvider {
+  LOCAL
+  S3
+}
+
+enum CashSessionStatus {
+  OPEN
+  CLOSED
+}
+
+enum CashMovementType {
+  OPENING
+  CREDIT_DISBURSEMENT
+  PAYMENT_COLLECTION
+  DEPOSIT_TO_VAULT
+  WITHDRAWAL_FROM_VAULT
+  ADJUSTMENT
+  CLOSING
+}
+
+enum CashMovementDirection {
+  IN
+  OUT
+}
+
+enum ReportType {
+  CREDIT_PORTFOLIO
+  DELINQUENCY
+  CASH_CLOSING
+  PAYMENTS
+  CLIENTS
+  EMPLOYEES
+}
+
+enum ReportFormat {
+  PDF
+  XLSX
+  CSV
+}
+
+enum ReportStatus {
+  QUEUED
+  PROCESSING
+  READY
+  FAILED
+}
+
+model Organization {
+  id                  String   @id @default(uuid()) @db.Uuid
+  clerkOrganizationId String   @unique
+  name                String
+  ruc                 String?  @unique
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  users            AppUser[]
+  employees        Employee[]
+  clients          Client[]
+  creditProducts   CreditProduct[]
+  credits          Credit[]
+  approvalRequests ApprovalRequest[]
+  cashBoxes        CashBox[]
+  vaults           Vault[]
+  creditPolicy     CreditPolicy?
+  cashPolicy       CashPolicy?
+  documents        Document[]
+  reportExports    ReportExport[]
+  auditLogs        AuditLog[]
+
+  @@map("organizations")
+}
+
+model AppUser {
+  id             String   @id
+  organizationId String   @db.Uuid
+  email          String
+  fullName       String
+  role           UserRole @default(VIEWER)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization       Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employee           Employee?
+  uploadedDocuments  Document[]            @relation("UploadedDocuments")
+  requestedApprovals ApprovalRequest[]     @relation("RequestedApprovals")
+  reviewedApprovals  ApprovalRequest[]     @relation("ReviewedApprovals")
+  generatedReports   ReportExport[]
+  auditLogs          AuditLog[]
+  statusTransitions  CreditStatusHistory[]
+
+  @@unique([organizationId, email])
+  @@index([organizationId, role])
+  @@map("app_users")
+}
+
+model Employee {
+  id             String         @id @default(uuid()) @db.Uuid
+  organizationId String         @db.Uuid
+  userId         String?        @unique
+  firstName      String
+  lastName       String
+  dni            String
+  phone          String?
+  position       String
+  status         EmployeeStatus @default(ACTIVE)
+  creditLimit    Decimal        @default(0) @db.Decimal(14, 2)
+  hiredAt        DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  organization     Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user             AppUser?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  creditsAsAnalyst Credit[]       @relation("AnalystCredits")
+  cashSessions     CashSession[]
+  cashMovements    CashMovement[]
+
+  @@unique([organizationId, dni])
+  @@index([organizationId, status])
+  @@map("employees")
+}
+
+model Client {
+  id              String       @id @default(uuid()) @db.Uuid
+  organizationId  String       @db.Uuid
+  firstName       String
+  lastName        String
+  dni             String
+  phone           String
+  email           String?
+  personalAddress String?
+  businessAddress String?
+  birthDate       DateTime?
+  district        String?
+  province        String?
+  department      String?
+  occupation      String?
+  monthlyIncome   Decimal?     @db.Decimal(14, 2)
+  status          ClientStatus @default(ACTIVE)
+  notes           String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  credits      Credit[]
+  documents    Document[]
+
+  @@unique([organizationId, dni])
+  @@index([organizationId, status])
+  @@index([organizationId, lastName, firstName])
+  @@map("clients")
+}
+
+model CreditProduct {
+  id                  String     @id @default(uuid()) @db.Uuid
+  organizationId      String     @db.Uuid
+  type                CreditType
+  name                String
+  isActive            Boolean    @default(true)
+  minAmount           Decimal    @db.Decimal(14, 2)
+  maxAmount           Decimal    @db.Decimal(14, 2)
+  defaultInterestRate Decimal    @db.Decimal(8, 4)
+  defaultInstallments Int
+  requiresGuarantee   Boolean    @default(false)
+  approvalLimit       Decimal    @db.Decimal(14, 2)
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  credits      Credit[]
+
+  @@unique([organizationId, type])
+  @@index([organizationId, isActive])
+  @@map("credit_products")
+}
+
+model Credit {
+  id                String       @id @default(uuid()) @db.Uuid
+  organizationId    String       @db.Uuid
+  clientId          String       @db.Uuid
+  productId         String       @db.Uuid
+  analystId         String       @db.Uuid
+  code              String
+  type              CreditType
+  status            CreditStatus @default(DRAFT)
+  principalAmount   Decimal      @db.Decimal(14, 2)
+  interestRate      Decimal      @db.Decimal(8, 4)
+  installmentCount  Int
+  installmentAmount Decimal      @db.Decimal(14, 2)
+  totalAmount       Decimal      @db.Decimal(14, 2)
+  disbursedAt       DateTime?
+  firstDueDate      DateTime?
+  closedAt          DateTime?
+  rejectionReason   String?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  organization    Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client          Client                @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  product         CreditProduct         @relation(fields: [productId], references: [id], onDelete: Restrict)
+  analyst         Employee              @relation("AnalystCredits", fields: [analystId], references: [id], onDelete: Restrict)
+  approvalRequest ApprovalRequest?
+  collateral      Collateral?
+  schedules       PaymentSchedule[]
+  payments        Payment[]
+  documents       Document[]
+  statusHistory   CreditStatusHistory[]
+  cashMovements   CashMovement[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, status])
+  @@index([clientId, status])
+  @@index([analystId, createdAt])
+  @@map("credits")
+}
+
+model ApprovalRequest {
+  id              String         @id @default(uuid()) @db.Uuid
+  organizationId  String         @db.Uuid
+  creditId        String         @unique @db.Uuid
+  requestedById   String
+  reviewedById    String?
+  status          ApprovalStatus @default(PENDING)
+  requestedAmount Decimal        @db.Decimal(14, 2)
+  analystLimit    Decimal        @db.Decimal(14, 2)
+  reason          String
+  reviewerNotes   String?
+  requestedAt     DateTime       @default(now())
+  reviewedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  credit       Credit       @relation(fields: [creditId], references: [id], onDelete: Cascade)
+  requestedBy  AppUser      @relation("RequestedApprovals", fields: [requestedById], references: [id], onDelete: Restrict)
+  reviewedBy   AppUser?     @relation("ReviewedApprovals", fields: [reviewedById], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, status])
+  @@index([requestedById, requestedAt])
+  @@map("approval_requests")
+}
+
+model Collateral {
+  id             String   @id @default(uuid()) @db.Uuid
+  creditId       String   @unique @db.Uuid
+  description    String
+  estimatedValue Decimal  @db.Decimal(14, 2)
+  ownerName      String
+  ownerDni       String
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  credit Credit @relation(fields: [creditId], references: [id], onDelete: Cascade)
+
+  @@map("collaterals")
+}
+
+model PaymentSchedule {
+  id            String        @id @default(uuid()) @db.Uuid
+  creditId      String        @db.Uuid
+  installmentNo Int
+  dueDate       DateTime
+  principal     Decimal       @db.Decimal(14, 2)
+  interest      Decimal       @db.Decimal(14, 2)
+  penalty       Decimal       @default(0) @db.Decimal(14, 2)
+  totalDue      Decimal       @db.Decimal(14, 2)
+  paidAmount    Decimal       @default(0) @db.Decimal(14, 2)
+  status        PaymentStatus @default(PENDING)
+  paidAt        DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  credit   Credit    @relation(fields: [creditId], references: [id], onDelete: Cascade)
+  payments Payment[]
+
+  @@unique([creditId, installmentNo])
+  @@index([dueDate, status])
+  @@map("payment_schedules")
+}
+
+model Payment {
+  id                String        @id @default(uuid()) @db.Uuid
+  creditId          String        @db.Uuid
+  paymentScheduleId String?       @db.Uuid
+  method            PaymentMethod
+  amount            Decimal       @db.Decimal(14, 2)
+  paidAt            DateTime      @default(now())
+  reference         String?
+  notes             String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  credit          Credit           @relation(fields: [creditId], references: [id], onDelete: Restrict)
+  paymentSchedule PaymentSchedule? @relation(fields: [paymentScheduleId], references: [id], onDelete: SetNull)
+  cashMovements   CashMovement[]
+
+  @@index([creditId, paidAt])
+  @@index([paymentScheduleId])
+  @@map("payments")
+}
+
+model CreditStatusHistory {
+  id          String        @id @default(uuid()) @db.Uuid
+  creditId    String        @db.Uuid
+  changedById String?
+  fromStatus  CreditStatus?
+  toStatus    CreditStatus
+  notes       String?
+  createdAt   DateTime      @default(now())
+
+  credit    Credit   @relation(fields: [creditId], references: [id], onDelete: Cascade)
+  changedBy AppUser? @relation(fields: [changedById], references: [id], onDelete: SetNull)
+
+  @@index([creditId, createdAt])
+  @@map("credit_status_history")
+}
+
+model Document {
+  id             String          @id @default(uuid()) @db.Uuid
+  organizationId String          @db.Uuid
+  clientId       String?         @db.Uuid
+  creditId       String?         @db.Uuid
+  uploadedById   String
+  type           DocumentType
+  provider       StorageProvider
+  fileName       String
+  mimeType       String
+  sizeBytes      Int
+  storageKey     String
+  publicUrl      String?
+  createdAt      DateTime        @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client       Client?      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  credit       Credit?      @relation(fields: [creditId], references: [id], onDelete: Cascade)
+  uploadedBy   AppUser      @relation("UploadedDocuments", fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, type])
+  @@index([clientId])
+  @@index([creditId])
+  @@map("documents")
+}
+
+model CreditPolicy {
+  id                        String   @id @default(uuid()) @db.Uuid
+  organizationId            String   @unique @db.Uuid
+  maxAnalystApprovalAmount  Decimal  @db.Decimal(14, 2)
+  maxInstallments           Int
+  maxRequestFiles           Int      @default(5)
+  defaultInterestRate       Decimal  @default(0.12) @db.Decimal(8, 4)
+  defaultPenaltyRate        Decimal  @db.Decimal(8, 4)
+  graceDays                 Int      @default(0)
+  requireApprovalAboveLimit Boolean  @default(true)
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("credit_policies")
+}
+
+model CashPolicy {
+  id                    String   @id @default(uuid()) @db.Uuid
+  organizationId        String   @unique @db.Uuid
+  allowNegativeCash     Boolean  @default(false)
+  requireDailyClosing   Boolean  @default(true)
+  maxCashBoxBalance     Decimal  @db.Decimal(14, 2)
+  vaultWarningThreshold Decimal  @db.Decimal(14, 2)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("cash_policies")
+}
+
+model CashBox {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  name           String
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  sessions     CashSession[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId, isActive])
+  @@map("cash_boxes")
+}
+
+model Vault {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  name           String
+  balance        Decimal  @default(0) @db.Decimal(14, 2)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  cashMovements CashMovement[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId, isActive])
+  @@map("vaults")
+}
+
+model CashSession {
+  id             String            @id @default(uuid()) @db.Uuid
+  cashBoxId      String            @db.Uuid
+  employeeId     String            @db.Uuid
+  status         CashSessionStatus @default(OPEN)
+  openedAt       DateTime          @default(now())
+  closedAt       DateTime?
+  openingAmount  Decimal           @db.Decimal(14, 2)
+  expectedAmount Decimal?          @db.Decimal(14, 2)
+  countedAmount  Decimal?          @db.Decimal(14, 2)
+  difference     Decimal?          @db.Decimal(14, 2)
+  notes          String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  cashBox       CashBox        @relation(fields: [cashBoxId], references: [id], onDelete: Restrict)
+  employee      Employee       @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  cashMovements CashMovement[]
+
+  @@index([cashBoxId, status])
+  @@index([employeeId, openedAt])
+  @@map("cash_sessions")
+}
+
+model CashMovement {
+  id            String                @id @default(uuid()) @db.Uuid
+  cashSessionId String                @db.Uuid
+  vaultId       String?               @db.Uuid
+  employeeId    String                @db.Uuid
+  creditId      String?               @db.Uuid
+  paymentId     String?               @db.Uuid
+  type          CashMovementType
+  direction     CashMovementDirection
+  amount        Decimal               @db.Decimal(14, 2)
+  description   String
+  reference     String?
+  createdAt     DateTime              @default(now())
+
+  cashSession CashSession @relation(fields: [cashSessionId], references: [id], onDelete: Restrict)
+  vault       Vault?      @relation(fields: [vaultId], references: [id], onDelete: SetNull)
+  employee    Employee    @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  credit      Credit?     @relation(fields: [creditId], references: [id], onDelete: SetNull)
+  payment     Payment?    @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  @@index([cashSessionId, createdAt])
+  @@index([vaultId, createdAt])
+  @@index([creditId])
+  @@map("cash_movements")
+}
+
+model ReportExport {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  generatedById  String
+  type           ReportType
+  format         ReportFormat
+  status         ReportStatus @default(QUEUED)
+  filters        Json?
+  fileName       String?
+  storageKey     String?
+  errorMessage   String?
+  createdAt      DateTime     @default(now())
+  finishedAt     DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  generatedBy  AppUser      @relation(fields: [generatedById], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, type, createdAt])
+  @@index([generatedById, createdAt])
+  @@map("report_exports")
+}
+
+model AuditLog {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  actorId        String?
+  entity         String
+  entityId       String
+  action         String
+  before         Json?
+  after          Json?
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actor        AppUser?     @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, entity, entityId])
+  @@index([actorId, createdAt])
+  @@map("audit_logs")
+}
