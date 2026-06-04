@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Badge } from '../../common/components/Badge';
 import { Button } from '../../common/components/Button';
+import { hasRole, useAuth } from '../../common/auth/AuthProvider';
 import { formatDueDate, formatMoney, formatPercentage } from '../../common/lib/format';
 import { PageHeader } from '../../common/layout/PageHeader';
 import { clientStatusOptions, initialClientFilters, initialClientForm } from './data';
@@ -9,6 +10,7 @@ import { filterClients, getClientRiskColor, getClientRiskLabel, toClientFormStat
 import type { Client, ClientFilters, ClientFormState, PaymentVoucher } from './types';
 
 export const ClientesView: React.FC = () => {
+  const { user } = useAuth();
   const { clients, createClient, error, isCreating, isLoading, isUpdating, refetch, updateClient } = useClients();
   const {
     credits,
@@ -41,6 +43,7 @@ export const ClientesView: React.FC = () => {
 
   const selectedCredit = credits?.find((credit) => credit.id === selectedCreditId) ?? null;
   const selectedIds = selectedCredit ? selectedScheduleIds[selectedCredit.id] ?? [] : [];
+  const canPayInstallments = hasRole(user, ['ADMIN', 'CASHIER']);
 
   const handleChange = (field: keyof ClientFormState, value: string) => {
     setForm((currentForm) => ({
@@ -79,6 +82,8 @@ export const ClientesView: React.FC = () => {
   };
 
   const handleScheduleToggle = (creditId: string, scheduleId: string, checked: boolean) => {
+    if (!canPayInstallments) return;
+
     setSelectedScheduleIds((currentValue) => {
       const currentIds = currentValue[creditId] ?? [];
       const nextIds = checked ? [...currentIds, scheduleId] : currentIds.filter((id) => id !== scheduleId);
@@ -91,6 +96,7 @@ export const ClientesView: React.FC = () => {
   };
 
   const handlePayInstallments = async () => {
+    if (!canPayInstallments) return;
     if (!selectedCredit) return;
 
     const paid = await payInstallments(selectedCredit.id, selectedIds);
@@ -376,7 +382,7 @@ export const ClientesView: React.FC = () => {
                 <h2 className="card__title">Detalle de cuotas</h2>
                 <p className="card__description">{selectedCredit ? selectedCredit.code : 'Sin credito seleccionado'}</p>
               </div>
-              <Button className="button--compact" disabled={!selectedIds.length || isPaying} onClick={() => void handlePayInstallments()}>
+              <Button className="button--compact" disabled={!canPayInstallments || !selectedIds.length || isPaying} onClick={() => void handlePayInstallments()}>
                 Pagar
               </Button>
             </div>
@@ -394,6 +400,7 @@ export const ClientesView: React.FC = () => {
                   </Button>
                 </div>
               ) : null}
+              {!canPayInstallments ? <p className="message--error">No autorizado para pagar cuotas.</p> : null}
               {selectedCredit ? (
                 <div className="table-wrap">
                   <table className="table">
@@ -418,7 +425,7 @@ export const ClientesView: React.FC = () => {
                             <td>
                               <input
                                 checked={selectedIds.includes(schedule.id)}
-                                disabled={isPaid}
+                                disabled={isPaid || !canPayInstallments}
                                 onChange={(event) => handleScheduleToggle(selectedCredit.id, schedule.id, event.target.checked)}
                                 type="checkbox"
                               />

@@ -12,6 +12,15 @@ export interface ApprovalRequestListItem {
   status: ApprovalStatus;
   requestedAt: string;
   reviewerNotes: string | null;
+  files: ApprovalRequestFile[];
+}
+
+export interface ApprovalRequestFile {
+  fileName: string;
+  id: string;
+  mimeType: string;
+  sizeBytes: number;
+  url: string | null;
 }
 
 export interface ReviewApprovalInput {

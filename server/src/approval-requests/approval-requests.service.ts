@@ -30,6 +30,7 @@ export class ApprovalRequestsService {
           include: {
             analyst: true,
             client: true,
+            documents: true,
           },
         },
       },
@@ -80,6 +81,7 @@ export class ApprovalRequestsService {
           include: {
             analyst: true,
             client: true,
+            documents: true,
           },
         },
       },
@@ -125,6 +127,7 @@ export class ApprovalRequestsService {
       where: {
         approvalRequest: null,
         organizationId,
+        status: CreditStatus.PENDING_APPROVAL,
       },
     });
 
@@ -158,6 +161,7 @@ export class ApprovalRequestsService {
           include: {
             analyst: true;
             client: true;
+            documents: true;
           };
         };
       };
@@ -165,12 +169,19 @@ export class ApprovalRequestsService {
   ): ApprovalRequestListItem {
     return {
       analystLimit: Number(request.analystLimit),
-      analystName: `${request.credit.analyst.firstName} ${request.credit.analyst.lastName}`,
+      analystName: request.credit.analyst.fullName,
       amount: Number(request.requestedAmount),
       clientName: `${request.credit.client.firstName} ${request.credit.client.lastName}`,
       creditCode: request.credit.code,
       creditId: request.creditId,
       creditType: request.credit.type === CreditType.EXPRESS ? 'Express' : 'Garantia',
+      files: request.credit.documents.map((document) => ({
+        fileName: document.fileName,
+        id: document.id,
+        mimeType: document.mimeType,
+        sizeBytes: document.sizeBytes,
+        url: document.publicUrl,
+      })),
       id: request.id,
       requestedAt: request.requestedAt.toISOString(),
       reviewerNotes: request.reviewerNotes,

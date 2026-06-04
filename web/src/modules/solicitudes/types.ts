@@ -17,6 +17,15 @@ export interface ApprovalRequest {
   status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELED';
   requestedAt: string;
   reviewerNotes: string | null;
+  files: ApprovalRequestFile[];
+}
+
+export interface ApprovalRequestFile {
+  fileName: string;
+  id: string;
+  mimeType: string;
+  sizeBytes: number;
+  url: string | null;
 }
 
 export interface ApprovalRequestFilters {

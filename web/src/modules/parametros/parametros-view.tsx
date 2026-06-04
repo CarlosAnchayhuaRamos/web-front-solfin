@@ -116,11 +116,11 @@ export const ParametrosView: React.FC = () => {
       ) : null}
       <form className="grid grid--two" id="parameters-form" onSubmit={handleSubmit}>
         <Card>
-          <CardHeader description="Interes continuo: monto final = capital x e^tasa." title="Credito" />
+          <CardHeader description="Interes continuo mensual: monto final = capital x e^(tasa x meses)." title="Credito" />
           <CardBody>
             <div className="form-grid">
               <div className="field">
-                <label htmlFor="defaultInterestRate">Tasa de interes</label>
+                <label htmlFor="defaultInterestRate">Tasa de interes mensual</label>
                 <input
                   id="defaultInterestRate"
                   min="0"

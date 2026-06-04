@@ -43,6 +43,7 @@ export const useCreditRegistration = () => {
     return {
       amount: Number(form.amount),
       clientId: form.clientId,
+      fileNames: form.files.map((file) => file.name),
       installments: Number(form.installments),
       notes: form.notes,
       productType: form.productType,

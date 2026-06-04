@@ -136,6 +136,7 @@ export const SolicitudesView: React.FC = () => {
                   <th>Limite</th>
                   <th>Estado</th>
                   <th>Fecha</th>
+                  <th>Archivos</th>
                   <th>Acciones</th>
                 </tr>
               </thead>
@@ -157,6 +158,23 @@ export const SolicitudesView: React.FC = () => {
                         <Badge color={status.color}>{status.label}</Badge>
                       </td>
                       <td>{formatDueDate(request.requestedAt)}</td>
+                      <td>
+                        {request.files.length ? (
+                          <div className="list">
+                            {request.files.map((file) =>
+                              file.url ? (
+                                <a href={file.url} key={file.id} rel="noreferrer" target="_blank">
+                                  {file.fileName}
+                                </a>
+                              ) : (
+                                <span key={file.id}>{file.fileName}</span>
+                              ),
+                            )}
+                          </div>
+                        ) : (
+                          <span>-</span>
+                        )}
+                      </td>
                       <td>
                         <div className="actions">
                           <Button

@@ -168,6 +168,107 @@ a {
   padding: 28px;
 }
 
+.landing {
+  display: grid;
+  min-height: 100vh;
+  grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+  align-items: center;
+  gap: 36px;
+  background:
+    linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(250, 204, 21, 0.14)),
+    #ffffff;
+  padding: 48px;
+}
+
+.landing__content {
+  display: grid;
+  max-width: 760px;
+  gap: 28px;
+}
+
+.landing__brand {
+  display: grid;
+  gap: 18px;
+}
+
+.landing__eyebrow {
+  color: var(--primary);
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.landing h1 {
+  margin: 0;
+  max-width: 720px;
+  font-size: 56px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.landing p {
+  max-width: 620px;
+  margin: 0;
+  color: #374151;
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.landing__actions {
+  display: flex;
+}
+
+.landing__login {
+  display: grid;
+  max-width: 420px;
+  gap: 14px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.08);
+  padding: 20px;
+}
+
+.landing__hint {
+  color: var(--muted-foreground);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.landing__panel {
+  display: grid;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.12);
+  overflow: hidden;
+}
+
+.landing__panel div {
+  display: grid;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+  padding: 28px;
+}
+
+.landing__panel div:last-child {
+  border-bottom: 0;
+}
+
+.landing__panel span {
+  color: var(--muted-foreground);
+  font-size: 13px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.landing__panel strong {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 34px;
+}
+
 .page-header {
   display: flex;
   align-items: flex-start;
@@ -636,5 +737,14 @@ a {
 
   .actions {
     justify-content: flex-start;
+  }
+
+  .landing {
+    grid-template-columns: 1fr;
+    padding: 24px;
+  }
+
+  .landing h1 {
+    font-size: 38px;
   }
 }

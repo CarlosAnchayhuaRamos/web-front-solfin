@@ -15,12 +15,6 @@ enum UserRole {
   VIEWER
 }
 
-enum EmployeeStatus {
-  ACTIVE
-  SUSPENDED
-  INACTIVE
-}
-
 enum ClientStatus {
   ACTIVE
   WATCHLIST
@@ -134,7 +128,6 @@ model Organization {
   updatedAt           DateTime @updatedAt
 
   users            AppUser[]
-  employees        Employee[]
   clients          Client[]
   creditProducts   CreditProduct[]
   credits          Credit[]
@@ -155,13 +148,21 @@ model AppUser {
   organizationId String   @db.Uuid
   email          String
   fullName       String
+  dni            String?
+  passwordHash   String?
+  phone          String?
+  position       String?
+  creditLimit    Decimal  @default(0) @db.Decimal(14, 2)
+  hiredAt        DateTime?
   role           UserRole @default(VIEWER)
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   organization       Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  employee           Employee?
+  creditsAsAnalyst   Credit[]              @relation("AnalystCredits")
+  cashSessions       CashSession[]
+  cashMovements      CashMovement[]
   uploadedDocuments  Document[]            @relation("UploadedDocuments")
   requestedApprovals ApprovalRequest[]     @relation("RequestedApprovals")
   reviewedApprovals  ApprovalRequest[]     @relation("ReviewedApprovals")
@@ -170,34 +171,9 @@ model AppUser {
   statusTransitions  CreditStatusHistory[]
 
   @@unique([organizationId, email])
+  @@unique([organizationId, dni])
   @@index([organizationId, role])
   @@map("app_users")
-}
-
-model Employee {
-  id             String         @id @default(uuid()) @db.Uuid
-  organizationId String         @db.Uuid
-  userId         String?        @unique
-  firstName      String
-  lastName       String
-  dni            String
-  phone          String?
-  position       String
-  status         EmployeeStatus @default(ACTIVE)
-  creditLimit    Decimal        @default(0) @db.Decimal(14, 2)
-  hiredAt        DateTime?
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
-
-  organization     Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  user             AppUser?       @relation(fields: [userId], references: [id], onDelete: SetNull)
-  creditsAsAnalyst Credit[]       @relation("AnalystCredits")
-  cashSessions     CashSession[]
-  cashMovements    CashMovement[]
-
-  @@unique([organizationId, dni])
-  @@index([organizationId, status])
-  @@map("employees")
 }
 
 model Client {
@@ -259,7 +235,7 @@ model Credit {
   organizationId    String       @db.Uuid
   clientId          String       @db.Uuid
   productId         String       @db.Uuid
-  analystId         String       @db.Uuid
+  analystId         String
   code              String
   type              CreditType
   status            CreditStatus @default(DRAFT)
@@ -278,7 +254,7 @@ model Credit {
   organization    Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   client          Client                @relation(fields: [clientId], references: [id], onDelete: Restrict)
   product         CreditProduct         @relation(fields: [productId], references: [id], onDelete: Restrict)
-  analyst         Employee              @relation("AnalystCredits", fields: [analystId], references: [id], onDelete: Restrict)
+  analyst         AppUser               @relation("AnalystCredits", fields: [analystId], references: [id], onDelete: Restrict)
   approvalRequest ApprovalRequest?
   collateral      Collateral?
   schedules       PaymentSchedule[]
@@ -489,7 +465,7 @@ model Vault {
 model CashSession {
   id             String            @id @default(uuid()) @db.Uuid
   cashBoxId      String            @db.Uuid
-  employeeId     String            @db.Uuid
+  userId         String
   status         CashSessionStatus @default(OPEN)
   openedAt       DateTime          @default(now())
   closedAt       DateTime?
@@ -502,11 +478,11 @@ model CashSession {
   updatedAt      DateTime          @updatedAt
 
   cashBox       CashBox        @relation(fields: [cashBoxId], references: [id], onDelete: Restrict)
-  employee      Employee       @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  user          AppUser        @relation(fields: [userId], references: [id], onDelete: Restrict)
   cashMovements CashMovement[]
 
   @@index([cashBoxId, status])
-  @@index([employeeId, openedAt])
+  @@index([userId, openedAt])
   @@map("cash_sessions")
 }
 
@@ -514,7 +490,7 @@ model CashMovement {
   id            String                @id @default(uuid()) @db.Uuid
   cashSessionId String                @db.Uuid
   vaultId       String?               @db.Uuid
-  employeeId    String                @db.Uuid
+  userId        String
   creditId      String?               @db.Uuid
   paymentId     String?               @db.Uuid
   type          CashMovementType
@@ -526,7 +502,7 @@ model CashMovement {
 
   cashSession CashSession @relation(fields: [cashSessionId], references: [id], onDelete: Restrict)
   vault       Vault?      @relation(fields: [vaultId], references: [id], onDelete: SetNull)
-  employee    Employee    @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  user        AppUser     @relation(fields: [userId], references: [id], onDelete: Restrict)
   credit      Credit?     @relation(fields: [creditId], references: [id], onDelete: SetNull)
   payment     Payment?    @relation(fields: [paymentId], references: [id], onDelete: SetNull)
 

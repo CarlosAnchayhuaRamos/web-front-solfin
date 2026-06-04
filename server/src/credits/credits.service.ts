@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { CreditStatus, CreditType, PaymentMethod, PaymentStatus, UserRole } from '@prisma/client';
+import { CreditStatus, CreditType, DocumentType, PaymentMethod, PaymentStatus, StorageProvider, UserRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { CreateCreditInput, CreditSimulationInput, CreditSimulationResult, PayInstallmentsInput } from './credits.types';
 
@@ -12,8 +12,9 @@ const demoOrganization = {
 const demoAnalyst = {
   creditLimit: 3500,
   dni: '70000001',
-  firstName: 'Rosa',
-  lastName: 'Huaman',
+  fullName: 'Rosa Huaman',
+  id: 'user_demo_analyst',
+  email: 'analista@solfin.pe',
   phone: '900000001',
   position: 'Analista',
 };
@@ -59,10 +60,6 @@ export class CreditsService {
     const product = await this.getProduct(organization.id, input.productType);
     const policy = await this.getCreditPolicy(organization.id);
 
-    if (input.amount > Number(product.maxAmount)) {
-      throw new BadRequestException(`El monto maximo para ${product.name} es ${product.maxAmount}`);
-    }
-
     if (input.amount < Number(product.minAmount)) {
       throw new BadRequestException(`El monto minimo para ${product.name} es ${product.minAmount}`);
     }
@@ -71,8 +68,8 @@ export class CreditsService {
       throw new BadRequestException(`El maximo de cuotas permitido es ${policy.maxInstallments}`);
     }
 
-    const interestRate = Number(policy.defaultInterestRate);
-    const totalAmount = this.roundMoney(input.amount * Math.exp(interestRate));
+    const monthlyInterestRate = Number(policy.defaultInterestRate);
+    const totalAmount = this.roundMoney(input.amount * Math.exp(monthlyInterestRate * input.installments));
     const totalInterest = totalAmount - input.amount;
     const installmentAmount = this.roundMoney(totalAmount / input.installments);
     const principal = this.roundMoney(input.amount / input.installments);
@@ -101,7 +98,7 @@ export class CreditsService {
       amount: input.amount,
       installmentAmount,
       installments,
-      interestRate,
+      interestRate: monthlyInterestRate,
       totalAmount: this.roundMoney(totalAmount),
     };
   }
@@ -110,6 +107,7 @@ export class CreditsService {
     const simulation = await this.simulate(input);
     const organization = await this.getOrganization();
     const product = await this.getProduct(organization.id, input.productType);
+    const policy = await this.getCreditPolicy(organization.id);
     const analyst = await this.getAnalyst(organization.id);
     const client = await this.prisma.client.findFirst({
       where: {
@@ -124,6 +122,13 @@ export class CreditsService {
 
     const code = await this.nextCreditCode(organization.id);
     const requester = await this.getRequester(organization.id);
+    const fileNames = this.getRequestFileNames(input.fileNames);
+
+    if (fileNames.length > (policy.maxRequestFiles ?? 5)) {
+      throw new BadRequestException(`Maximo ${policy.maxRequestFiles ?? 5} archivos permitidos`);
+    }
+
+    const requiresAdminApproval = input.amount > Number(analyst.creditLimit);
 
     return this.prisma.credit.create({
       data: {
@@ -146,22 +151,37 @@ export class CreditsService {
             totalDue: installment.totalDue,
           })),
         },
-        approvalRequest: {
-          create: {
-            analystLimit: analyst.creditLimit,
+        documents: {
+          create: fileNames.map((fileName) => ({
+            fileName,
+            mimeType: 'application/octet-stream',
             organizationId: organization.id,
-            reason: input.notes?.trim() || 'Credito registrado para revision',
-            requestedAmount: input.amount,
-            requestedById: requester.id,
-          },
+            provider: StorageProvider.LOCAL,
+            sizeBytes: 0,
+            storageKey: `credit-requests/${code}/${fileName}`,
+            type: DocumentType.OTHER,
+            uploadedById: requester.id,
+          })),
         },
-        status: CreditStatus.PENDING_APPROVAL,
+        approvalRequest: requiresAdminApproval
+          ? {
+              create: {
+                analystLimit: analyst.creditLimit,
+                organizationId: organization.id,
+                reason: input.notes?.trim() || 'Credito registrado para revision',
+                requestedAmount: input.amount,
+                requestedById: requester.id,
+              },
+            }
+          : undefined,
+        status: requiresAdminApproval ? CreditStatus.PENDING_APPROVAL : CreditStatus.APPROVED,
         totalAmount: simulation.totalAmount,
         type: input.productType,
       },
       include: {
         approvalRequest: true,
         client: true,
+        documents: true,
         schedules: { orderBy: { installmentNo: 'asc' } },
       },
     });
@@ -340,26 +360,28 @@ export class CreditsService {
   }
 
   private async getAnalyst(organizationId: string) {
-    return this.prisma.employee.upsert({
+    return this.prisma.appUser.upsert({
       create: {
         creditLimit: demoAnalyst.creditLimit,
         dni: demoAnalyst.dni,
-        firstName: demoAnalyst.firstName,
-        lastName: demoAnalyst.lastName,
+        email: demoAnalyst.email,
+        fullName: demoAnalyst.fullName,
+        id: demoAnalyst.id,
         organizationId,
         phone: demoAnalyst.phone,
         position: demoAnalyst.position,
+        role: UserRole.ANALYST,
       },
       update: {
         creditLimit: demoAnalyst.creditLimit,
+        dni: demoAnalyst.dni,
+        email: demoAnalyst.email,
+        fullName: demoAnalyst.fullName,
+        phone: demoAnalyst.phone,
         position: demoAnalyst.position,
+        role: UserRole.ANALYST,
       },
-      where: {
-        organizationId_dni: {
-          dni: demoAnalyst.dni,
-          organizationId,
-        },
-      },
+      where: { id: demoAnalyst.id },
     });
   }
 
@@ -410,5 +432,11 @@ export class CreditsService {
 
   private roundMoney(value: number) {
     return Math.round(value * 100) / 100;
+  }
+
+  private getRequestFileNames(fileNames: string[] | undefined) {
+    if (!fileNames?.length) return [];
+
+    return fileNames.map((fileName) => fileName.trim()).filter(Boolean);
   }
 }

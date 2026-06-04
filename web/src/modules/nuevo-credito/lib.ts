@@ -2,8 +2,8 @@ import type { CreditProductOption } from './types';
 import type { Client } from '../clientes/types';
 
 export const getProductDescription = (product: CreditProductOption) => {
-  if (product.requiresGuarantee) return 'Requiere garantia y documentos de respaldo.';
-  return 'Aprobacion rapida con evaluacion basica.';
+  if (product.requiresGuarantee) return 'Requiere garantia. Montos sobre limite del analista pasan a administrador.';
+  return 'Aprobacion directa hasta limite del analista. Montos superiores pasan a administrador.';
 };
 
 export const filterCreditClients = (clients: Client[], query: string) => {

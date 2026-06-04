@@ -255,7 +255,7 @@ export const NuevoCreditoView: React.FC = () => {
               <div className="list">
                 <article className="list-item">
                   <div>
-                    <strong>Tasa</strong>
+                    <strong>Tasa mensual</strong>
                     <span>{formatPercentage(simulation.interestRate)}</span>
                   </div>
                   <Badge color="blue">{simulation.installments.length} cuotas</Badge>
@@ -302,7 +302,7 @@ export const NuevoCreditoView: React.FC = () => {
                       <Badge color={product.requiresGuarantee ? 'yellow' : 'blue'}>
                         {product.defaultInstallments} cuotas
                       </Badge>
-                      <Badge color="gray">{formatMoney(product.maxAmount)}</Badge>
+                      <Badge color="gray">Segun evaluacion</Badge>
                     </div>
                   </article>
                 ))}

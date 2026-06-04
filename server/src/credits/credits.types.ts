@@ -8,6 +8,7 @@ export interface CreditSimulationInput {
 
 export interface CreateCreditInput extends CreditSimulationInput {
   clientId: string;
+  fileNames?: string[];
   notes?: string;
 }
 
