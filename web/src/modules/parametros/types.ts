@@ -27,6 +27,7 @@ export interface CreditPolicyFormState {
 
 export interface CashPolicy {
   allowNegativeCash: boolean;
+  maxCashDifference: number;
   maxCashBoxBalance: number;
   requireDailyClosing: boolean;
   vaultWarningThreshold: number;
@@ -34,6 +35,7 @@ export interface CashPolicy {
 
 export interface CashPolicyFormState {
   allowNegativeCash: boolean;
+  maxCashDifference: string;
   maxCashBoxBalance: string;
   requireDailyClosing: boolean;
   vaultWarningThreshold: string;

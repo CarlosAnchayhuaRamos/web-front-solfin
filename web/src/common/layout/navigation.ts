@@ -6,7 +6,7 @@ export const navigationItems = [
   { code: 'NC', label: 'Nuevo credito', path: '/nuevo-credito', roles: ['ADMIN', 'ANALYST'] },
   { code: 'CL', label: 'Clientes', path: '/clientes', roles: ['ADMIN', 'ANALYST', 'CASHIER'] },
   { code: 'CO', label: 'Colaboradores', path: '/colaboradores', roles: ['ADMIN'] },
-  { code: 'AC', label: 'Apertura cierre', path: '/apertura-cierre', roles: ['ADMIN'] },
+  { code: 'AC', label: 'Apertura cierre', path: '/apertura-cierre', roles: ['ADMIN', 'CASHIER'] },
   { code: 'PA', label: 'Parametros', path: '/parametros', roles: ['ADMIN'] },
   { code: 'RE', label: 'Reportes', path: '/reportes', roles: ['ADMIN', 'ANALYST'] },
 ] as const;

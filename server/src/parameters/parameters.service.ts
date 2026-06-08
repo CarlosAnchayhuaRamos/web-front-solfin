@@ -25,6 +25,7 @@ const createCreditPolicyData = (organizationId: string) => ({
 
 const defaultCashPolicy = {
   allowNegativeCash: false,
+  maxCashDifference: 0.5,
   maxCashBoxBalance: 15000,
   requireDailyClosing: true,
   vaultWarningThreshold: 5000,
@@ -64,7 +65,7 @@ export class ParametersService {
       create: {
         ...defaultCashPolicy,
         organizationId: organization.id,
-      },
+      } as never,
       update: {},
       where: { organizationId: organization.id },
     });
@@ -80,8 +81,8 @@ export class ParametersService {
       create: {
         ...input,
         organizationId: organization.id,
-      },
-      update: input,
+      } as never,
+      update: input as never,
       where: { organizationId: organization.id },
     });
 
@@ -118,12 +119,14 @@ export class ParametersService {
 
   private toCashPolicyDto(policy: {
     allowNegativeCash: boolean;
+    maxCashDifference?: unknown;
     maxCashBoxBalance: unknown;
     requireDailyClosing: boolean;
     vaultWarningThreshold: unknown;
   }): CashPolicyDto {
     return {
       allowNegativeCash: policy.allowNegativeCash,
+      maxCashDifference: Number(policy.maxCashDifference ?? defaultCashPolicy.maxCashDifference),
       maxCashBoxBalance: Number(policy.maxCashBoxBalance),
       requireDailyClosing: policy.requireDailyClosing,
       vaultWarningThreshold: Number(policy.vaultWarningThreshold),
@@ -157,6 +160,10 @@ export class ParametersService {
   }
 
   private validateCashPolicyInput(input: UpdateCashPolicyInput) {
+    if (input.maxCashDifference < 0) {
+      throw new BadRequestException('La diferencia maxima no puede ser negativa');
+    }
+
     if (input.maxCashBoxBalance <= 0) {
       throw new BadRequestException('El tope de caja debe ser mayor a cero');
     }

@@ -39,6 +39,10 @@ export class AuthService {
         SELECT id, dni, email, "fullName", role, "passwordHash"
         FROM app_users
         WHERE lower(email) = $1 OR dni = $2
+        ORDER BY
+          CASE WHEN "passwordHash" IS NULL THEN 1 ELSE 0 END,
+          "isActive" DESC,
+          "updatedAt" DESC
         LIMIT 1
       `,
       identifier,

@@ -29,11 +29,13 @@ const App: React.FC = () => {
             <Route element={<ProtectedRoute roles={['ADMIN', 'ANALYST', 'CASHIER']} />}>
               <Route path="/clientes" element={<ClientesView />} />
             </Route>
+            <Route element={<ProtectedRoute roles={['ADMIN', 'CASHIER']} />}>
+              <Route path="/apertura-cierre" element={<AperturaCierreView />} />
+            </Route>
             <Route element={<ProtectedRoute roles={['ADMIN']} />}>
               <Route path="/solicitudes" element={<SolicitudesView />} />
               <Route path="/colaboradores" element={<ColaboradoresView />} />
               <Route path="/parametros" element={<ParametrosView />} />
-              <Route path="/apertura-cierre" element={<AperturaCierreView />} />
             </Route>
           </Route>
         </Route>

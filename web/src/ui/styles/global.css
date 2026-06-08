@@ -512,6 +512,69 @@ a {
   gap: 14px;
 }
 
+.denomination-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(90px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.denomination-table {
+  margin-top: 16px;
+}
+
+.denomination-table th,
+.denomination-table td {
+  padding: 6px 10px;
+}
+
+.denomination-table input {
+  width: 110px;
+  min-height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0 8px;
+}
+
+.denomination-table__total {
+  width: 150px;
+  min-width: 150px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.compact-table {
+  margin-top: 16px;
+}
+
+.compact-table th,
+.compact-table td {
+  padding: 8px 10px;
+}
+
+.compact-table select {
+  min-height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0 10px;
+}
+
+.inline-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+}
+
+.metric-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 14px 0;
+}
+
 .field {
   display: grid;
   gap: 7px;
@@ -730,7 +793,9 @@ a {
 
   .grid--stats,
   .grid--two,
+  .denomination-grid,
   .form-grid,
+  .inline-form,
   .sidebar__nav {
     grid-template-columns: 1fr;
   }

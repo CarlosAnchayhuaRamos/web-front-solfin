@@ -30,6 +30,7 @@ export interface CreditSimulationResult {
 
 export interface PayInstallmentsInput {
   scheduleIds: string[];
+  userId: string;
 }
 
 export interface PaymentVoucher {

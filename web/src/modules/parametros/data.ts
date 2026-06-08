@@ -12,6 +12,7 @@ export const initialCreditPolicyForm: CreditPolicyFormState = {
 
 export const initialCashPolicyForm: CashPolicyFormState = {
   allowNegativeCash: false,
+  maxCashDifference: '0.5',
   maxCashBoxBalance: '15000',
   requireDailyClosing: true,
   vaultWarningThreshold: '5000',
@@ -25,6 +26,7 @@ export const creditSettings: SettingItem[] = [
 ];
 
 export const cashSettings: SettingItem[] = [
-  { description: 'Saldo maximo permitido en caja principal.', id: 'cash-max', label: 'Tope de caja', value: 'S/ 15,000' },
+  { description: 'Saldo maximo permitido al abrir o operar caja.', id: 'cash-max', label: 'Maximo efectivo caja', value: 'S/ 15,000' },
+  { description: 'Diferencia maxima permitida entre efectivo esperado y contado.', id: 'cash-difference', label: 'Tolerancia cierre', value: 'S/ 0.50' },
   { description: 'Cierre obligatorio al finalizar operaciones.', id: 'daily-close', label: 'Cierre diario', value: 'Activo' },
 ];

@@ -6,6 +6,7 @@ interface AuthUser {
   dni: string;
   email: string;
   fullName: string;
+  id: string;
   role: AppRole;
 }
 

@@ -144,20 +144,20 @@ model Organization {
 }
 
 model AppUser {
-  id             String   @id
-  organizationId String   @db.Uuid
+  id             String    @id
+  organizationId String    @db.Uuid
   email          String
   fullName       String
   dni            String?
   passwordHash   String?
   phone          String?
   position       String?
-  creditLimit    Decimal  @default(0) @db.Decimal(14, 2)
+  creditLimit    Decimal   @default(0) @db.Decimal(14, 2)
   hiredAt        DateTime?
-  role           UserRole @default(VIEWER)
-  isActive       Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  role           UserRole  @default(VIEWER)
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   organization       Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   creditsAsAnalyst   Credit[]              @relation("AnalystCredits")
@@ -419,6 +419,7 @@ model CashPolicy {
   organizationId        String   @unique @db.Uuid
   allowNegativeCash     Boolean  @default(false)
   requireDailyClosing   Boolean  @default(true)
+  maxCashDifference     Decimal  @default(0.5) @db.Decimal(14, 2)
   maxCashBoxBalance     Decimal  @db.Decimal(14, 2)
   vaultWarningThreshold Decimal  @db.Decimal(14, 2)
   createdAt             DateTime @default(now())
@@ -433,6 +434,7 @@ model CashBox {
   id             String   @id @default(uuid()) @db.Uuid
   organizationId String   @db.Uuid
   name           String
+  assignedUserId String?
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -446,13 +448,15 @@ model CashBox {
 }
 
 model Vault {
-  id             String   @id @default(uuid()) @db.Uuid
-  organizationId String   @db.Uuid
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @db.Uuid
   name           String
-  balance        Decimal  @default(0) @db.Decimal(14, 2)
-  isActive       Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  balance        Decimal   @default(0) @db.Decimal(14, 2)
+  isActive       Boolean   @default(true)
+  openedAt       DateTime?
+  openedByUserId String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   cashMovements CashMovement[]
@@ -463,19 +467,21 @@ model Vault {
 }
 
 model CashSession {
-  id             String            @id @default(uuid()) @db.Uuid
-  cashBoxId      String            @db.Uuid
-  userId         String
-  status         CashSessionStatus @default(OPEN)
-  openedAt       DateTime          @default(now())
-  closedAt       DateTime?
-  openingAmount  Decimal           @db.Decimal(14, 2)
-  expectedAmount Decimal?          @db.Decimal(14, 2)
-  countedAmount  Decimal?          @db.Decimal(14, 2)
-  difference     Decimal?          @db.Decimal(14, 2)
-  notes          String?
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
+  id                   String            @id @default(uuid()) @db.Uuid
+  cashBoxId            String            @db.Uuid
+  userId               String
+  status               CashSessionStatus @default(OPEN)
+  openedAt             DateTime          @default(now())
+  closedAt             DateTime?
+  openingAmount        Decimal           @db.Decimal(14, 2)
+  expectedAmount       Decimal?          @db.Decimal(14, 2)
+  countedAmount        Decimal?          @db.Decimal(14, 2)
+  difference           Decimal?          @db.Decimal(14, 2)
+  denominations        Json?
+  closingDenominations Json?
+  notes                String?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
 
   cashBox       CashBox        @relation(fields: [cashBoxId], references: [id], onDelete: Restrict)
   user          AppUser        @relation(fields: [userId], references: [id], onDelete: Restrict)

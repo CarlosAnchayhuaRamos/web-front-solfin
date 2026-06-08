@@ -42,6 +42,7 @@ export const toCreditPolicyInput = (form: CreditPolicyFormState): CreditPolicy =
 export const toCashPolicyFormState = (policy: CashPolicy): CashPolicyFormState => {
   return {
     allowNegativeCash: policy.allowNegativeCash,
+    maxCashDifference: String(policy.maxCashDifference),
     maxCashBoxBalance: String(policy.maxCashBoxBalance),
     requireDailyClosing: policy.requireDailyClosing,
     vaultWarningThreshold: String(policy.vaultWarningThreshold),
@@ -51,6 +52,7 @@ export const toCashPolicyFormState = (policy: CashPolicy): CashPolicyFormState =
 export const toCashPolicyInput = (form: CashPolicyFormState): CashPolicy => {
   return {
     allowNegativeCash: form.allowNegativeCash,
+    maxCashDifference: Number(form.maxCashDifference),
     maxCashBoxBalance: Number(form.maxCashBoxBalance),
     requireDailyClosing: form.requireDailyClosing,
     vaultWarningThreshold: Number(form.vaultWarningThreshold),

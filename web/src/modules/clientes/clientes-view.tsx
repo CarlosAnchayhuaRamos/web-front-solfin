@@ -98,8 +98,9 @@ export const ClientesView: React.FC = () => {
   const handlePayInstallments = async () => {
     if (!canPayInstallments) return;
     if (!selectedCredit) return;
+    if (!user) return;
 
-    const paid = await payInstallments(selectedCredit.id, selectedIds);
+    const paid = await payInstallments(selectedCredit.id, selectedIds, user.id);
 
     if (!paid) return;
 

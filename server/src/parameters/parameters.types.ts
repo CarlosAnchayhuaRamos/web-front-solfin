@@ -20,6 +20,7 @@ export interface UpdateCreditPolicyInput {
 
 export interface CashPolicyDto {
   allowNegativeCash: boolean;
+  maxCashDifference: number;
   maxCashBoxBalance: number;
   requireDailyClosing: boolean;
   vaultWarningThreshold: number;
@@ -27,6 +28,7 @@ export interface CashPolicyDto {
 
 export interface UpdateCashPolicyInput {
   allowNegativeCash: boolean;
+  maxCashDifference: number;
   maxCashBoxBalance: number;
   requireDailyClosing: boolean;
   vaultWarningThreshold: number;

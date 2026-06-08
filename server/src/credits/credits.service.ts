@@ -240,6 +240,10 @@ export class CreditsService {
       throw new BadRequestException('Seleccione al menos una cuota');
     }
 
+    if (!input.userId?.trim()) {
+      throw new BadRequestException('El cajero es obligatorio');
+    }
+
     const organization = await this.getOrganization();
     const credit = await this.prisma.credit.findFirst({
       include: { client: true },
@@ -262,26 +266,47 @@ export class CreditsService {
       throw new BadRequestException('No hay cuotas pendientes seleccionadas');
     }
 
-    await this.prisma.$transaction(
-      schedules.flatMap((schedule) => [
-        this.prisma.payment.create({
+    const cashSession = await this.findOpenCashSession(organization.id, input.userId);
+
+    if (!cashSession) {
+      throw new BadRequestException('Debe tener una caja abierta para registrar pagos');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      for (const schedule of schedules) {
+        const payment = await tx.payment.create({
           data: {
             amount: schedule.totalDue,
             creditId,
             method: PaymentMethod.CASH,
             paymentScheduleId: schedule.id,
           },
-        }),
-        this.prisma.paymentSchedule.update({
+        });
+
+        await tx.paymentSchedule.update({
           data: {
             paidAmount: schedule.totalDue,
             paidAt: new Date(),
             status: PaymentStatus.PAID,
           },
           where: { id: schedule.id },
-        }),
-      ]),
-    );
+        });
+
+        await tx.cashMovement.create({
+          data: {
+            amount: schedule.totalDue,
+            cashSessionId: cashSession.id,
+            creditId,
+            description: `Pago cuota ${schedule.installmentNo} credito ${credit.code}`,
+            direction: 'IN',
+            paymentId: payment.id,
+            reference: payment.id,
+            type: 'PAYMENT_COLLECTION',
+            userId: input.userId,
+          },
+        });
+      }
+    });
 
     const credits = await this.findApprovedByClient(credit.clientId);
     const amount = schedules.reduce((total, schedule) => total + Number(schedule.totalDue), 0);
@@ -297,6 +322,20 @@ export class CreditsService {
         voucherCode: `VCH-${Date.now()}`,
       },
     };
+  }
+
+  private async findOpenCashSession(organizationId: string, userId: string) {
+    const sessions = await this.prisma.cashSession.findMany({
+      orderBy: { openedAt: 'desc' },
+      take: 1,
+      where: {
+        cashBox: { organizationId },
+        status: 'OPEN',
+        userId,
+      },
+    });
+
+    return sessions[0] ?? null;
   }
 
   private async getOrganization() {

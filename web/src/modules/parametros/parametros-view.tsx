@@ -202,7 +202,7 @@ export const ParametrosView: React.FC = () => {
           <CardBody>
             <div className="form-grid">
               <div className="field">
-                <label htmlFor="maxCashBoxBalance">Tope de caja</label>
+                <label htmlFor="maxCashBoxBalance">Maximo efectivo caja</label>
                 <input
                   id="maxCashBoxBalance"
                   min="1"
@@ -221,6 +221,17 @@ export const ParametrosView: React.FC = () => {
                   step="1"
                   type="number"
                   value={cashForm.vaultWarningThreshold}
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="maxCashDifference">Diferencia maxima cierre</label>
+                <input
+                  id="maxCashDifference"
+                  min="0"
+                  onChange={(event) => handleCashChange('maxCashDifference', event.target.value)}
+                  step="0.1"
+                  type="number"
+                  value={cashForm.maxCashDifference}
                 />
               </div>
               <label className="field field--checkbox" htmlFor="requireDailyClosing">

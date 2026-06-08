@@ -154,13 +154,13 @@ export const useClientCredits = () => {
   }, []);
 
   const payInstallments = useCallback(
-    async (creditId: string, scheduleIds: string[]) => {
+    async (creditId: string, scheduleIds: string[], userId: string) => {
       setError(null);
       setIsPaying(true);
 
       try {
         const response = await fetch(`${apiBaseUrl}/credits/${creditId}/pay-installments`, {
-          body: JSON.stringify({ scheduleIds }),
+          body: JSON.stringify({ scheduleIds, userId }),
           headers: { 'Content-Type': 'application/json' },
           method: 'POST',
         });
