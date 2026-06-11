@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
+import { apiBaseUrl, apiFetch } from '../../common/api/client';
 import { getApiErrorMessage } from './lib';
 import type { ApprovalRequest } from './types';
-
-const apiBaseUrl = process.env.REACT_APP_API_URL ?? 'http://127.0.0.1:4000';
 
 export const useApprovalRequests = () => {
   const [requests, setRequests] = useState<ApprovalRequest[] | null>(null);
@@ -15,7 +14,7 @@ export const useApprovalRequests = () => {
     setIsLoading(true);
 
     try {
-      const response = await fetch(`${apiBaseUrl}/approval-requests`, { cache: 'no-store' });
+      const response = await apiFetch(`${apiBaseUrl}/approval-requests`, { cache: 'no-store' });
 
       if (!response.ok) {
         setError(await getApiErrorMessage(response));
@@ -36,7 +35,7 @@ export const useApprovalRequests = () => {
       setReviewingId(id);
 
       try {
-        const response = await fetch(`${apiBaseUrl}/approval-requests/${id}/${action}`, {
+        const response = await apiFetch(`${apiBaseUrl}/approval-requests/${id}/${action}`, {
           body: JSON.stringify({}),
           headers: { 'Content-Type': 'application/json' },
           method: 'POST',

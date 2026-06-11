@@ -29,7 +29,11 @@ export interface CreditSimulationResult {
 }
 
 export interface PayInstallmentsInput {
-  scheduleIds: string[];
+  amount: number;
+  userId: string;
+}
+
+export interface DisburseCreditInput {
   userId: string;
 }
 

@@ -1,8 +1,11 @@
 import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { UserRole } from '@prisma/client';
+import { Roles } from '../auth/auth.decorators';
 import { ApprovalRequestsService } from './approval-requests.service';
 import type { ReviewApprovalInput } from './approval-requests.types';
 
 @Controller('approval-requests')
+@Roles(UserRole.ADMIN)
 export class ApprovalRequestsController {
   constructor(private readonly approvalRequestsService: ApprovalRequestsService) {}
 

@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { apiBaseUrl } from '../api/client';
 
 export type AppRole = 'ADMIN' | 'ANALYST' | 'CASHIER';
 
@@ -27,7 +28,6 @@ interface AuthContextValue {
 const authStorageKey = 'solfin-authenticated';
 const authTokenKey = 'solfin-auth-token';
 const authUserKey = 'solfin-auth-user';
-const apiBaseUrl = process.env.REACT_APP_API_URL ?? 'http://127.0.0.1:4000';
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {

@@ -4,11 +4,13 @@ import { Button } from '../../common/components/Button';
 import { Card, CardBody, CardHeader } from '../../common/components/Card';
 import { useAuth } from '../../common/auth/AuthProvider';
 import { formatMoney } from '../../common/lib/format';
+import { escapePrintHtml, getPrintBrandMarkup, getPrintBrandStyles, printDocument } from '../../common/lib/print';
 import { PageHeader } from '../../common/layout/PageHeader';
 import { useCashPolicy } from '../parametros/hooks';
 import { currencyDenominations } from './data';
 import { useCashSessions } from './hooks';
 import { getCashDifference, getDenominationCounts, getDenominationSummary, getDenominationTotal } from './lib';
+import type { CashCloseReport, VaultCloseReport } from './types';
 
 const initialQuantities = Object.fromEntries(currencyDenominations.map((denomination) => [denomination.label, '0']));
 
@@ -18,6 +20,7 @@ export const AperturaCierreView: React.FC = () => {
   const cash = useCashSessions();
   const [newCashBoxName, setNewCashBoxName] = useState('');
   const [selectedCashBox, setSelectedCashBox] = useState('');
+  const [balanceAmounts, setBalanceAmounts] = useState<Record<string, string>>({});
   const [quantities, setQuantities] = useState<Record<string, string>>(initialQuantities);
 
   const maxCashDifference = cashPolicy?.maxCashDifference ?? 0.5;
@@ -49,13 +52,20 @@ export const AperturaCierreView: React.FC = () => {
     }));
   };
 
-  const handleToggleVault = () => {
+  const handleToggleVault = async () => {
     if (cash.isVaultOpen) {
-      void cash.closeVault();
+      const reportWindow = window.open('', '_blank', 'width=900,height=760');
+      const report = await cash.closeVault();
+      if (!report) {
+        reportWindow?.close();
+        return;
+      }
+
+      printVaultCloseReport(report, reportWindow);
       return;
     }
 
-    void cash.openVault();
+    await cash.openVault();
   };
 
   const handleCreateCashBox = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -69,6 +79,18 @@ export const AperturaCierreView: React.FC = () => {
   const handleAssignCashBox = (boxId: string, cashierId: string) => {
     if (!cashierId) return;
     void cash.assignCashBox(boxId, cashierId);
+  };
+
+  const handleAddBalance = async (sessionId: string) => {
+    if (!user) return;
+
+    const amount = Number(balanceAmounts[sessionId] ?? 0);
+    if (!Number.isFinite(amount) || amount <= 0) return;
+
+    const saved = await cash.addCashSessionBalance(sessionId, amount, user.id);
+    if (!saved) return;
+
+    setBalanceAmounts((currentAmounts) => ({ ...currentAmounts, [sessionId]: '' }));
   };
 
   const handleOpenCashBox = async () => {
@@ -89,14 +111,20 @@ export const AperturaCierreView: React.FC = () => {
     if (!selectedOpenSession) return;
     if (!canCloseCashBox) return;
 
+    const reportWindow = window.open('', '_blank', 'width=760,height=720');
     const closed = await cash.closeCashSession(
       selectedOpenSession.id,
       denominationTotal,
       getDenominationCounts(currencyDenominations, quantities),
     );
 
-    if (!closed) return;
+    if (!closed) {
+      reportWindow?.close();
+      return;
+    }
+
     setQuantities(initialQuantities);
+    printCashCloseReport(closed, reportWindow);
   };
 
   if (cash.isLoading) {
@@ -152,7 +180,7 @@ export const AperturaCierreView: React.FC = () => {
                   <Badge color={cash.isVaultOpen ? 'black' : 'yellow'}>{cash.isVaultOpen ? 'Abierta' : 'Pendiente'}</Badge>
                 </div>
                 {cash.error ? <p className="message--error">{cash.error}</p> : null}
-                <Button disabled={cash.isSaving} onClick={handleToggleVault}>
+                <Button disabled={cash.isSaving} onClick={() => void handleToggleVault()}>
                   {cash.isSaving ? 'Procesando...' : cash.isVaultOpen ? 'Cerrar boveda' : 'Abrir boveda'}
                 </Button>
                 {cash.unclosedCashBoxes.length ? (
@@ -222,6 +250,45 @@ export const AperturaCierreView: React.FC = () => {
                                 </option>
                               ))}
                             </select>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <h3>Cajas abiertas</h3>
+                <div className="table-wrap compact-table">
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Caja</th>
+                        <th>Saldo</th>
+                        <th>Adicionar saldo</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cash.sessions?.filter((session) => session.status === 'OPEN').map((session) => (
+                        <tr key={session.id}>
+                          <td>{session.cashBox}</td>
+                          <td className="money">{formatMoney(session.expectedAmount)}</td>
+                          <td>
+                            <div className="inline-form">
+                              <input
+                                min="0.01"
+                                onChange={(event) => setBalanceAmounts((current) => ({ ...current, [session.id]: event.target.value }))}
+                                placeholder="S/ 0.00"
+                                step="0.01"
+                                type="number"
+                                value={balanceAmounts[session.id] ?? ''}
+                              />
+                              <Button
+                                className="button--compact"
+                                disabled={cash.isSaving || Number(balanceAmounts[session.id] ?? 0) <= 0}
+                                onClick={() => void handleAddBalance(session.id)}
+                              >
+                                Adicionar
+                              </Button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -388,4 +455,90 @@ export const AperturaCierreView: React.FC = () => {
       </div>
     </>
   );
+};
+
+const printCashCloseReport = (report: CashCloseReport, printWindow: Window | null) => {
+  if (!printWindow) return;
+
+  writeCloseReportDocument(printWindow, 'Resumen de cierre de caja', `
+    <p><strong>Caja:</strong> ${escapePrintHtml(report.cashBox)}</p>
+    <p><strong>Cajero:</strong> ${escapePrintHtml(report.cashier)}</p>
+    <p><strong>Cierre:</strong> ${new Date(report.closedAt).toLocaleString('es-PE')}</p>
+    ${getCashReportSummaryMarkup(report)}
+  `);
+};
+
+const printVaultCloseReport = (report: VaultCloseReport, printWindow: Window | null) => {
+  if (!printWindow) return;
+
+  const rows = report.boxes.map((box) => `
+    <tr>
+      <td>${escapePrintHtml(box.cashBox)}</td>
+      <td>${escapePrintHtml(box.cashier)}</td>
+      <td>${formatMoney(box.openingAmount)}</td>
+      <td>${formatMoney(box.income)}</td>
+      <td>${formatMoney(box.expenses)}</td>
+      <td>${formatMoney(box.expectedAmount)}</td>
+      <td>${formatMoney(box.countedAmount)}</td>
+      <td>${formatMoney(box.difference)}</td>
+    </tr>
+  `).join('');
+
+  writeCloseReportDocument(printWindow, 'Resumen de cierre de boveda', `
+    <p><strong>Boveda:</strong> ${escapePrintHtml(report.vaultName)}</p>
+    <p><strong>Cierre:</strong> ${new Date(report.closedAt).toLocaleString('es-PE')}</p>
+    <div class="summary">
+      <div><span>Apertura total</span><strong>${formatMoney(report.totalOpening)}</strong></div>
+      <div><span>Ingresos</span><strong>${formatMoney(report.totalIncome)}</strong></div>
+      <div><span>Egresos</span><strong>${formatMoney(report.totalExpenses)}</strong></div>
+      <div><span>Esperado</span><strong>${formatMoney(report.totalExpected)}</strong></div>
+      <div><span>Contado</span><strong>${formatMoney(report.totalCounted)}</strong></div>
+      <div><span>Diferencia</span><strong>${formatMoney(report.totalDifference)}</strong></div>
+    </div>
+    <table>
+      <thead><tr><th>Caja</th><th>Cajero</th><th>Apertura</th><th>Ingresos</th><th>Egresos</th><th>Esperado</th><th>Contado</th><th>Diferencia</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="8">Sin cierres de caja registrados hoy</td></tr>'}</tbody>
+    </table>
+  `);
+};
+
+const getCashReportSummaryMarkup = (report: CashCloseReport) => `
+  <div class="summary">
+    <div><span>Apertura</span><strong>${formatMoney(report.openingAmount)}</strong></div>
+    <div><span>Ingresos</span><strong>${formatMoney(report.income)}</strong></div>
+    <div><span>Egresos</span><strong>${formatMoney(report.expenses)}</strong></div>
+    <div><span>Esperado</span><strong>${formatMoney(report.expectedAmount)}</strong></div>
+    <div><span>Contado</span><strong>${formatMoney(report.countedAmount)}</strong></div>
+    <div><span>Diferencia</span><strong>${formatMoney(report.difference)}</strong></div>
+  </div>
+`;
+
+const writeCloseReportDocument = (printWindow: Window, title: string, content: string) => {
+  printWindow.document.write(`
+    <html>
+      <head>
+        <title>${escapePrintHtml(title)}</title>
+        <style>
+          body { color: #111827; font-family: Arial, sans-serif; padding: 24px; }
+          ${getPrintBrandStyles()}
+          h1 { font-size: 22px; margin: 20px 0 12px; }
+          p { margin: 5px 0; }
+          .summary { display: grid; gap: 8px; grid-template-columns: repeat(3, 1fr); margin-top: 18px; }
+          .summary div { border: 1px solid #d1d5db; padding: 10px; }
+          .summary span { display: block; font-size: 11px; margin-bottom: 4px; }
+          table { border-collapse: collapse; margin-top: 18px; width: 100%; }
+          th, td { border: 1px solid #d1d5db; font-size: 11px; padding: 7px; text-align: right; }
+          th:first-child, td:first-child, th:nth-child(2), td:nth-child(2) { text-align: left; }
+          @media print { body { padding: 0; } }
+        </style>
+      </head>
+      <body>
+        ${getPrintBrandMarkup(window.location.origin)}
+        <h1>${escapePrintHtml(title)}</h1>
+        ${content}
+      </body>
+    </html>
+  `);
+  printWindow.document.close();
+  printDocument(printWindow);
 };

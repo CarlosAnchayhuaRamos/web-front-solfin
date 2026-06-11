@@ -1,4 +1,6 @@
 import { Body, Controller, Get, Put } from '@nestjs/common';
+import { UserRole } from '@prisma/client';
+import { Roles } from '../auth/auth.decorators';
 import { ParametersService } from './parameters.service';
 import type { UpdateCashPolicyInput, UpdateCreditPolicyInput } from './parameters.types';
 
@@ -12,6 +14,7 @@ export class ParametersController {
   }
 
   @Put('credit-policy')
+  @Roles(UserRole.ADMIN)
   updateCreditPolicy(@Body() input: UpdateCreditPolicyInput) {
     return this.parametersService.updateCreditPolicy(input);
   }
@@ -22,6 +25,7 @@ export class ParametersController {
   }
 
   @Put('cash-policy')
+  @Roles(UserRole.ADMIN)
   updateCashPolicy(@Body() input: UpdateCashPolicyInput) {
     return this.parametersService.updateCashPolicy(input);
   }

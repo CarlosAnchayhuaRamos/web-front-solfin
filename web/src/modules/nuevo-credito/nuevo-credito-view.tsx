@@ -3,11 +3,12 @@ import { Badge } from '../../common/components/Badge';
 import { Button } from '../../common/components/Button';
 import { Card, CardBody, CardHeader } from '../../common/components/Card';
 import { formatMoney, formatPercentage } from '../../common/lib/format';
+import { escapePrintHtml, getPrintBrandMarkup, getPrintBrandStyles, printDocument } from '../../common/lib/print';
 import { PageHeader } from '../../common/layout/PageHeader';
 import { creditProductOptions, initialCreditForm } from './data';
 import { useCreditClients, useCreditPolicyParameters, useCreditRegistration } from './hooks';
 import { filterCreditClients, getProductDescription } from './lib';
-import type { CreditFormState, CreditProductType } from './types';
+import type { CreditFormState, CreditProductType, RegisteredCredit } from './types';
 
 export const NuevoCreditoView: React.FC = () => {
   const { clients, error: clientsError, fetchClients, isLoading } = useCreditClients();
@@ -98,6 +99,11 @@ export const NuevoCreditoView: React.FC = () => {
     setForm(initialCreditForm);
     setIsClientComboboxOpen(false);
     setSuccessMessage('Credito registrado correctamente');
+
+    const printed = printPaymentSchedule(registered);
+    if (printed) return;
+
+    setFileError('Credito registrado. El navegador bloqueo la impresion del cronograma.');
   };
 
   return (
@@ -313,4 +319,81 @@ export const NuevoCreditoView: React.FC = () => {
       </section>
     </>
   );
+};
+
+const printPaymentSchedule = (credit: RegisteredCredit) => {
+  const printWindow = window.open('', '_blank', 'width=860,height=720');
+
+  if (!printWindow) return false;
+
+  const clientName = escapePrintHtml(`${credit.client.firstName} ${credit.client.lastName}`);
+  const creditCode = escapePrintHtml(credit.code);
+  const creditStatus = escapePrintHtml(credit.status);
+  const rows = credit.schedules
+    .map((schedule) => {
+      const dueDate = new Date(schedule.dueDate).toLocaleDateString('es-PE');
+
+      return `
+        <tr>
+          <td>${schedule.installmentNo}</td>
+          <td>${dueDate}</td>
+          <td>${formatMoney(schedule.principal)}</td>
+          <td>${formatMoney(schedule.interest)}</td>
+          <td>${formatMoney(schedule.totalDue)}</td>
+        </tr>
+      `;
+    })
+    .join('');
+
+  printWindow.document.write(`
+    <html>
+      <head>
+        <title>Cronograma ${creditCode}</title>
+        <style>
+          body { font-family: Arial, sans-serif; color: #111827; padding: 24px; }
+          h1 { font-size: 22px; margin: 20px 0 8px; }
+          p { margin: 4px 0; }
+          ${getPrintBrandStyles()}
+          table { border-collapse: collapse; margin-top: 18px; width: 100%; }
+          th, td { border: 1px solid #d1d5db; padding: 8px; text-align: right; }
+          th { background: #f3f4f6; }
+          th:first-child, td:first-child, th:nth-child(2), td:nth-child(2) { text-align: left; }
+          .summary { margin-top: 16px; }
+          .total { font-size: 18px; font-weight: 700; margin-top: 12px; }
+          @media print {
+            body { padding: 0; }
+            th { background: transparent; }
+          }
+        </style>
+      </head>
+      <body>
+        ${getPrintBrandMarkup(window.location.origin)}
+        <h1>Cronograma de pagos</h1>
+        <p><strong>Credito:</strong> ${creditCode}</p>
+        <p><strong>Cliente:</strong> ${clientName}</p>
+        <p><strong>Estado:</strong> ${creditStatus}</p>
+        <div class="summary">
+          <p><strong>Monto:</strong> ${formatMoney(credit.principalAmount)}</p>
+          <p><strong>Tasa mensual:</strong> ${formatPercentage(credit.interestRate)}</p>
+          <p><strong>Cuota:</strong> ${formatMoney(credit.installmentAmount)}</p>
+          <p class="total">Total: ${formatMoney(credit.totalAmount)}</p>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Cuota</th>
+              <th>Vence</th>
+              <th>Capital</th>
+              <th>Interes</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </body>
+    </html>
+  `);
+  printWindow.document.close();
+  printDocument(printWindow);
+  return true;
 };

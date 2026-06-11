@@ -52,13 +52,12 @@ export const LandingView: React.FC = () => {
               autoComplete="current-password"
               id="password"
               onChange={(event) => setPassword(event.target.value)}
-              placeholder="admin"
+              placeholder="Contraseña"
               required
               type="password"
               value={password}
             />
           </div>
-          <p className="landing__hint">Admin: 77777777. Analista: 70000001. Caja: 70000003. Clave: admin.</p>
           {error ? <p className="message--error">{error}</p> : null}
           <Button type="submit">Ingresar</Button>
         </form>

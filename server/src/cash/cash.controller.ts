@@ -1,8 +1,11 @@
 import { Body, Controller, Get, Param, Post, Put } from '@nestjs/common';
+import { UserRole } from '@prisma/client';
+import { Roles } from '../auth/auth.decorators';
 import { CashService } from './cash.service';
-import type { AssignCashBoxInput, CloseCashSessionInput, CreateCashBoxInput, OpenCashSessionInput } from './cash.types';
+import type { AddCashSessionBalanceInput, AssignCashBoxInput, CloseCashSessionInput, CreateCashBoxInput, OpenCashSessionInput } from './cash.types';
 
 @Controller('cash')
+@Roles(UserRole.ADMIN, UserRole.CASHIER)
 export class CashController {
   constructor(private readonly cashService: CashService) {}
 
@@ -17,11 +20,13 @@ export class CashController {
   }
 
   @Post('boxes')
+  @Roles(UserRole.ADMIN)
   createCashBox(@Body() input: CreateCashBoxInput) {
     return this.cashService.createCashBox(input);
   }
 
   @Put('boxes/:id/assign')
+  @Roles(UserRole.ADMIN)
   assignCashBox(@Param('id') id: string, @Body() input: AssignCashBoxInput) {
     return this.cashService.assignCashBox(id, input);
   }
@@ -32,11 +37,13 @@ export class CashController {
   }
 
   @Post('vault/open')
+  @Roles(UserRole.ADMIN)
   openVault() {
     return this.cashService.openVault();
   }
 
   @Post('vault/close')
+  @Roles(UserRole.ADMIN)
   closeVault() {
     return this.cashService.closeVault();
   }
@@ -54,5 +61,11 @@ export class CashController {
   @Post('sessions/:id/close')
   closeCashSession(@Param('id') id: string, @Body() input: CloseCashSessionInput) {
     return this.cashService.closeCashSession(id, input);
+  }
+
+  @Post('sessions/:id/add-balance')
+  @Roles(UserRole.ADMIN)
+  addCashSessionBalance(@Param('id') id: string, @Body() input: AddCashSessionBalanceInput) {
+    return this.cashService.addCashSessionBalance(id, input);
   }
 }

@@ -33,3 +33,27 @@ export interface CreditSimulationResult {
   installments: PaymentScheduleItem[];
   totalAmount: number;
 }
+
+export interface RegisteredCreditClient {
+  firstName: string;
+  lastName: string;
+}
+
+export interface RegisteredCreditSchedule {
+  dueDate: string;
+  installmentNo: number;
+  interest: number;
+  principal: number;
+  totalDue: number;
+}
+
+export interface RegisteredCredit {
+  client: RegisteredCreditClient;
+  code: string;
+  installmentAmount: number;
+  interestRate: number;
+  principalAmount: number;
+  schedules: RegisteredCreditSchedule[];
+  status: string;
+  totalAmount: number;
+}

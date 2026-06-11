@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { CashBox, CashDenominationCount, Cashier, CashSession, UnclosedCashBox } from './types';
-
-const apiBaseUrl = process.env.REACT_APP_API_URL ?? 'http://127.0.0.1:4000';
+import { apiBaseUrl, apiFetch } from '../../common/api/client';
+import type { CashBox, CashCloseReport, CashDenominationCount, Cashier, CashSession, UnclosedCashBox, VaultCloseReport } from './types';
 
 const getApiErrorMessage = async (response: Response) => {
   try {
@@ -32,10 +31,10 @@ export const useCashSessions = () => {
 
     try {
       const [sessionsResponse, vaultResponse, boxesResponse, cashiersResponse] = await Promise.all([
-        fetch(`${apiBaseUrl}/cash/sessions`, { cache: 'no-store' }),
-        fetch(`${apiBaseUrl}/cash/vault/status`, { cache: 'no-store' }),
-        fetch(`${apiBaseUrl}/cash/boxes`, { cache: 'no-store' }),
-        fetch(`${apiBaseUrl}/cash/cashiers`, { cache: 'no-store' }),
+        apiFetch(`${apiBaseUrl}/cash/sessions`, { cache: 'no-store' }),
+        apiFetch(`${apiBaseUrl}/cash/vault/status`, { cache: 'no-store' }),
+        apiFetch(`${apiBaseUrl}/cash/boxes`, { cache: 'no-store' }),
+        apiFetch(`${apiBaseUrl}/cash/cashiers`, { cache: 'no-store' }),
       ]);
 
       if (!sessionsResponse.ok) {
@@ -79,7 +78,7 @@ export const useCashSessions = () => {
     setIsSaving(true);
 
     try {
-      const response = await fetch(`${apiBaseUrl}/cash/vault/open`, { method: 'POST' });
+      const response = await apiFetch(`${apiBaseUrl}/cash/vault/open`, { method: 'POST' });
 
       if (!response.ok) {
         const error = await getVaultToggleError(response);
@@ -104,7 +103,7 @@ export const useCashSessions = () => {
     setIsSaving(true);
 
     try {
-      const response = await fetch(`${apiBaseUrl}/cash/vault/close`, { method: 'POST' });
+      const response = await apiFetch(`${apiBaseUrl}/cash/vault/close`, { method: 'POST' });
 
       if (!response.ok) {
         const error = await getVaultToggleError(response);
@@ -113,8 +112,9 @@ export const useCashSessions = () => {
         return false;
       }
 
+      const result = (await response.json()) as { report: VaultCloseReport };
       setIsVaultOpen(false);
-      return true;
+      return result.report;
     } catch {
       setError('No se pudo conectar con el backend');
       return false;
@@ -133,7 +133,7 @@ export const useCashSessions = () => {
     setIsSaving(true);
 
     try {
-      const response = await fetch(`${apiBaseUrl}/cash/sessions/open`, {
+      const response = await apiFetch(`${apiBaseUrl}/cash/sessions/open`, {
         body: JSON.stringify({ cashBoxName, cashierName: user.fullName, denominations, openingAmount, userId: user.id }),
         headers: { 'Content-Type': 'application/json' },
         method: 'POST',
@@ -160,7 +160,7 @@ export const useCashSessions = () => {
     setIsSaving(true);
 
     try {
-      const response = await fetch(`${apiBaseUrl}/cash/boxes`, {
+      const response = await apiFetch(`${apiBaseUrl}/cash/boxes`, {
         body: JSON.stringify({ name }),
         headers: { 'Content-Type': 'application/json' },
         method: 'POST',
@@ -187,7 +187,7 @@ export const useCashSessions = () => {
     setIsSaving(true);
 
     try {
-      const response = await fetch(`${apiBaseUrl}/cash/boxes/${boxId}/assign`, {
+      const response = await apiFetch(`${apiBaseUrl}/cash/boxes/${boxId}/assign`, {
         body: JSON.stringify({ cashierId }),
         headers: { 'Content-Type': 'application/json' },
         method: 'PUT',
@@ -214,8 +214,35 @@ export const useCashSessions = () => {
     setIsSaving(true);
 
     try {
-      const response = await fetch(`${apiBaseUrl}/cash/sessions/${sessionId}/close`, {
+      const response = await apiFetch(`${apiBaseUrl}/cash/sessions/${sessionId}/close`, {
         body: JSON.stringify({ countedAmount, denominations }),
+        headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        setError(await getApiErrorMessage(response));
+        return false;
+      }
+
+      const result = (await response.json()) as { report: CashCloseReport; session: CashSession };
+      setSessions((currentSessions) => (currentSessions ?? []).map((currentSession) => (currentSession.id === result.session.id ? result.session : currentSession)));
+      return result.report;
+    } catch {
+      setError('No se pudo conectar con el backend');
+      return false;
+    } finally {
+      setIsSaving(false);
+    }
+  }, []);
+
+  const addCashSessionBalance = useCallback(async (sessionId: string, amount: number, userId: string) => {
+    setError(null);
+    setIsSaving(true);
+
+    try {
+      const response = await apiFetch(`${apiBaseUrl}/cash/sessions/${sessionId}/add-balance`, {
+        body: JSON.stringify({ amount, userId }),
         headers: { 'Content-Type': 'application/json' },
         method: 'POST',
       });
@@ -242,6 +269,7 @@ export const useCashSessions = () => {
 
   return {
     error,
+    addCashSessionBalance,
     assignCashBox,
     boxes,
     cashiers,

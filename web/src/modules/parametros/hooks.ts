@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
+import { apiBaseUrl, apiFetch } from '../../common/api/client';
 import type { CashPolicy, CashPolicyFormState, CreditPolicy, CreditPolicyFormState } from './types';
-
-const apiBaseUrl = process.env.REACT_APP_API_URL ?? 'http://127.0.0.1:4000';
 
 const getApiErrorMessage = async (response: Response) => {
   try {
@@ -70,7 +69,7 @@ export const useCreditPolicy = () => {
     setIsLoading(true);
 
     try {
-      const response = await fetch(`${apiBaseUrl}/parameters/credit-policy`, { cache: 'no-store' });
+      const response = await apiFetch(`${apiBaseUrl}/parameters/credit-policy`, { cache: 'no-store' });
 
       if (!response.ok) {
         setError(await getApiErrorMessage(response));
@@ -92,7 +91,7 @@ export const useCreditPolicy = () => {
     setIsSaving(true);
 
     try {
-      const response = await fetch(`${apiBaseUrl}/parameters/credit-policy`, {
+      const response = await apiFetch(`${apiBaseUrl}/parameters/credit-policy`, {
         body: JSON.stringify(toCreditPolicyInput(form)),
         headers: { 'Content-Type': 'application/json' },
         method: 'PUT',
@@ -138,7 +137,7 @@ export const useCashPolicy = () => {
     setIsLoading(true);
 
     try {
-      const response = await fetch(`${apiBaseUrl}/parameters/cash-policy`, { cache: 'no-store' });
+      const response = await apiFetch(`${apiBaseUrl}/parameters/cash-policy`, { cache: 'no-store' });
 
       if (!response.ok) {
         setError(await getApiErrorMessage(response));
@@ -160,7 +159,7 @@ export const useCashPolicy = () => {
     setIsSaving(true);
 
     try {
-      const response = await fetch(`${apiBaseUrl}/parameters/cash-policy`, {
+      const response = await apiFetch(`${apiBaseUrl}/parameters/cash-policy`, {
         body: JSON.stringify(toCashPolicyInput(form)),
         headers: { 'Content-Type': 'application/json' },
         method: 'PUT',

@@ -17,3 +17,12 @@ export interface LoginResponse {
   token: string;
   user: AuthUserDto;
 }
+
+export interface AuthTokenPayload {
+  dni: string | null;
+  email: string;
+  exp: number;
+  name: string;
+  role: UserRole;
+  sub: string;
+}

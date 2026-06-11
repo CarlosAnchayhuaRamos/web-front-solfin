@@ -51,6 +51,7 @@ export interface ClientCreditSchedule {
 
 export interface ClientCredit {
   code: string;
+  disbursementCashBox: string | null;
   id: string;
   installmentAmount: number;
   interestRate: number;
@@ -61,6 +62,22 @@ export interface ClientCredit {
   status: string;
   totalAmount: number;
   type: string;
+}
+
+export interface OpenCashSession {
+  cashBox: string;
+  expectedAmount: number;
+  id: string;
+  status: 'OPEN' | 'CLOSED';
+  userId: string;
+}
+
+export interface CreditDisbursement {
+  amount: number;
+  cashBox: string;
+  cashSessionId: string;
+  creditCode: string;
+  disbursedAt: string;
 }
 
 export interface PaymentVoucher {

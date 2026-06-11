@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { Client, ClientCredit, CreateClientInput, PaymentVoucher, UpdateClientInput } from './types';
+import { apiBaseUrl, apiFetch } from '../../common/api/client';
+import type { Client, ClientCredit, CreateClientInput, CreditDisbursement, OpenCashSession, PaymentVoucher, UpdateClientInput } from './types';
 import { getApiErrorMessage } from './lib';
-
-const apiBaseUrl = process.env.REACT_APP_API_URL ?? 'http://127.0.0.1:4000';
 
 export const useClients = () => {
   const [clients, setClients] = useState<Client[] | null>(null);
@@ -24,7 +23,7 @@ export const useClients = () => {
     }
 
     try {
-      const response = await fetch(`${apiBaseUrl}/clients`, { cache: 'no-store' });
+      const response = await apiFetch(`${apiBaseUrl}/clients`, { cache: 'no-store' });
 
       if (!response.ok) {
         setError(await getApiErrorMessage(response));
@@ -54,7 +53,7 @@ export const useClients = () => {
       setIsCreating(true);
 
       try {
-        const response = await fetch(`${apiBaseUrl}/clients`, {
+        const response = await apiFetch(`${apiBaseUrl}/clients`, {
           body: JSON.stringify(input),
           headers: { 'Content-Type': 'application/json' },
           method: 'POST',
@@ -83,7 +82,7 @@ export const useClients = () => {
       setIsUpdating(true);
 
       try {
-        const response = await fetch(`${apiBaseUrl}/clients/${id}`, {
+        const response = await apiFetch(`${apiBaseUrl}/clients/${id}`, {
           body: JSON.stringify(input),
           headers: { 'Content-Type': 'application/json' },
           method: 'PUT',
@@ -127,7 +126,10 @@ export const useClientCredits = () => {
   const [credits, setCredits] = useState<ClientCredit[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isDisbursing, setIsDisbursing] = useState(false);
   const [isPaying, setIsPaying] = useState(false);
+  const [openCashSessions, setOpenCashSessions] = useState<OpenCashSession[] | null>(null);
+  const [disbursement, setDisbursement] = useState<CreditDisbursement | null>(null);
   const [voucher, setVoucher] = useState<PaymentVoucher | null>(null);
 
   const fetchCredits = useCallback(async (clientId: string) => {
@@ -135,14 +137,25 @@ export const useClientCredits = () => {
     setIsLoading(true);
 
     try {
-      const response = await fetch(`${apiBaseUrl}/credits/client/${clientId}/approved`, { cache: 'no-store' });
+      const [response, sessionsResponse] = await Promise.all([
+        apiFetch(`${apiBaseUrl}/credits/client/${clientId}/approved`, { cache: 'no-store' }),
+        apiFetch(`${apiBaseUrl}/cash/sessions`, { cache: 'no-store' }),
+      ]);
 
       if (!response.ok) {
         setError(await getApiErrorMessage(response));
         return false;
       }
 
+      if (!sessionsResponse.ok) {
+        setError(await getApiErrorMessage(sessionsResponse));
+        return false;
+      }
+
       setCredits((await response.json()) as ClientCredit[]);
+      const sessions = (await sessionsResponse.json()) as OpenCashSession[];
+      setOpenCashSessions(sessions.filter((session) => session.status === 'OPEN'));
+      setDisbursement(null);
       setVoucher(null);
       return true;
     } catch {
@@ -154,13 +167,13 @@ export const useClientCredits = () => {
   }, []);
 
   const payInstallments = useCallback(
-    async (creditId: string, scheduleIds: string[], userId: string) => {
+    async (creditId: string, amount: number, userId: string) => {
       setError(null);
       setIsPaying(true);
 
       try {
-        const response = await fetch(`${apiBaseUrl}/credits/${creditId}/pay-installments`, {
-          body: JSON.stringify({ scheduleIds, userId }),
+        const response = await apiFetch(`${apiBaseUrl}/credits/${creditId}/pay-installments`, {
+          body: JSON.stringify({ amount, userId }),
           headers: { 'Content-Type': 'application/json' },
           method: 'POST',
         });
@@ -184,12 +197,50 @@ export const useClientCredits = () => {
     [],
   );
 
+  const disburseCredit = useCallback(async (creditId: string, userId: string) => {
+    setError(null);
+    setIsDisbursing(true);
+
+    try {
+      const response = await apiFetch(`${apiBaseUrl}/credits/${creditId}/disburse`, {
+        body: JSON.stringify({ userId }),
+        headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        setError(await getApiErrorMessage(response));
+        return false;
+      }
+
+      const data = (await response.json()) as { credits: ClientCredit[]; disbursement: CreditDisbursement };
+      setCredits(data.credits);
+      setDisbursement(data.disbursement);
+      setOpenCashSessions((currentSessions) =>
+        (currentSessions ?? []).map((session) => {
+          if (session.id !== data.disbursement.cashSessionId) return session;
+          return { ...session, expectedAmount: session.expectedAmount - data.disbursement.amount };
+        }),
+      );
+      return true;
+    } catch {
+      setError('No se pudo conectar con el backend');
+      return false;
+    } finally {
+      setIsDisbursing(false);
+    }
+  }, []);
+
   return {
     credits,
+    disbursement,
+    disburseCredit,
     error,
     fetchCredits,
+    isDisbursing,
     isLoading,
     isPaying,
+    openCashSessions,
     payInstallments,
     voucher,
   };

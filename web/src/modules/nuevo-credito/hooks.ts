@@ -1,9 +1,8 @@
 import { useCallback, useState } from 'react';
+import { apiBaseUrl, apiFetch } from '../../common/api/client';
 import type { Client } from '../clientes/types';
-import type { CreditFormState, CreditSimulationResult } from './types';
+import type { CreditFormState, CreditSimulationResult, RegisteredCredit } from './types';
 import { getApiErrorMessage } from './lib';
-
-const apiBaseUrl = process.env.REACT_APP_API_URL ?? 'http://127.0.0.1:4000';
 
 export const useCreditClients = () => {
   const [clients, setClients] = useState<Client[] | null>(null);
@@ -15,7 +14,7 @@ export const useCreditClients = () => {
     setIsLoading(true);
 
     try {
-      const response = await fetch(`${apiBaseUrl}/clients`, { cache: 'no-store' });
+      const response = await apiFetch(`${apiBaseUrl}/clients`, { cache: 'no-store' });
 
       if (!response.ok) {
         setError(await getApiErrorMessage(response));
@@ -59,7 +58,7 @@ export const useCreditRegistration = () => {
     setIsSimulating(true);
 
     try {
-      const response = await fetch(`${apiBaseUrl}/credits/simulate`, {
+      const response = await apiFetch(`${apiBaseUrl}/credits/simulate`, {
         body: JSON.stringify(getPayload(form)),
         headers: { 'Content-Type': 'application/json' },
         method: 'POST',
@@ -87,7 +86,7 @@ export const useCreditRegistration = () => {
     setIsRegistering(true);
 
     try {
-      const response = await fetch(`${apiBaseUrl}/credits`, {
+      const response = await apiFetch(`${apiBaseUrl}/credits`, {
         body: JSON.stringify(getPayload(form)),
         headers: { 'Content-Type': 'application/json' },
         method: 'POST',
@@ -96,15 +95,16 @@ export const useCreditRegistration = () => {
       if (!response.ok) {
         setError(await getApiErrorMessage(response));
         setSimulation(null);
-        return false;
+        return null;
       }
 
+      const registeredCredit = (await response.json()) as RegisteredCredit;
       setSimulation(null);
-      return true;
+      return registeredCredit;
     } catch {
       setError('No se pudo conectar con el backend');
       setSimulation(null);
-      return false;
+      return null;
     } finally {
       setIsRegistering(false);
     }
@@ -118,7 +118,7 @@ export const useCreditPolicyParameters = () => {
 
   const fetchCreditPolicyParameters = useCallback(async () => {
     try {
-      const response = await fetch(`${apiBaseUrl}/parameters/credit-policy`, { cache: 'no-store' });
+      const response = await apiFetch(`${apiBaseUrl}/parameters/credit-policy`, { cache: 'no-store' });
 
       if (!response.ok) return;
 

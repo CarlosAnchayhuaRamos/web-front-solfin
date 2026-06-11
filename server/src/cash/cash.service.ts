@@ -2,11 +2,14 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import type {
+  AddCashSessionBalanceInput,
   AssignCashBoxInput,
   CashBoxDto,
   CashDenominationCountDto,
   CashierDto,
+  CloseCashSessionResultDto,
   CashSessionDto,
+  CloseVaultResultDto,
   CloseCashSessionInput,
   CreateCashBoxInput,
   OpenCashSessionInput,
@@ -38,6 +41,7 @@ export class CashService {
       `
         SELECT
           cs.id,
+          cs."userId",
           cb.name AS "cashBox",
           au."fullName" AS cashier,
           cs.status::text AS status,
@@ -198,7 +202,7 @@ export class CashService {
     };
   }
 
-  async closeVault(): Promise<VaultOpeningDto> {
+  async closeVault(): Promise<CloseVaultResultDto> {
     const organization = await this.getOrganization();
     await this.ensureCashSetup(organization.id);
     const unclosedCashBoxes = await this.findUnclosedCashBoxes(organization.id);
@@ -210,6 +214,7 @@ export class CashService {
       });
     }
 
+    const reports = await this.findTodayCashCloseReports(organization.id);
     const vaults = await this.prisma.$queryRawUnsafe<VaultRecord[]>(
       `
         UPDATE vaults
@@ -225,9 +230,22 @@ export class CashService {
     const vault = vaults[0];
 
     return {
-      balance: Number(vault.balance),
-      isOpen: Boolean(vault.openedAt),
-      vaultName: vault.name,
+      report: {
+        boxes: reports,
+        closedAt: new Date().toISOString(),
+        totalCounted: this.sumReportField(reports, 'countedAmount'),
+        totalDifference: this.sumReportField(reports, 'difference'),
+        totalExpected: this.sumReportField(reports, 'expectedAmount'),
+        totalExpenses: this.sumReportField(reports, 'expenses'),
+        totalIncome: this.sumReportField(reports, 'income'),
+        totalOpening: this.sumReportField(reports, 'openingAmount'),
+        vaultName: vault.name,
+      },
+      vault: {
+        balance: Number(vault.balance),
+        isOpen: Boolean(vault.openedAt),
+        vaultName: vault.name,
+      },
     };
   }
 
@@ -308,6 +326,7 @@ export class CashService {
         VALUES ($1::uuid, $2::uuid, $3, 'OPEN'::"CashSessionStatus", $4, $4, $5::jsonb, now(), now())
         RETURNING
           id,
+          "userId",
           $6 AS "cashBox",
           $7 AS cashier,
           status::text AS status,
@@ -330,7 +349,7 @@ export class CashService {
     return this.toSessionDto(sessions[0]);
   }
 
-  async closeCashSession(id: string, input: CloseCashSessionInput): Promise<CashSessionDto> {
+  async closeCashSession(id: string, input: CloseCashSessionInput): Promise<CloseCashSessionResultDto> {
     this.validateCloseCashSession(input);
 
     const organization = await this.getOrganization();
@@ -361,6 +380,7 @@ export class CashService {
           AND cs.status = 'OPEN'::"CashSessionStatus"
         RETURNING
           cs.id,
+          cs."userId",
           cb.name AS "cashBox",
           au."fullName" AS cashier,
           cs.status::text AS status,
@@ -384,7 +404,80 @@ export class CashService {
       throw new BadRequestException('La caja abierta no existe');
     }
 
-    return this.toSessionDto(session);
+    const movements = await this.getCashMovementTotals(id);
+
+    return {
+      report: {
+        cashBox: session.cashBox,
+        cashier: session.cashier,
+        closedAt: new Date().toISOString(),
+        countedAmount: Number(session.countedAmount),
+        difference: Number(session.difference),
+        expectedAmount: Number(session.expectedAmount),
+        expenses: movements.expenses,
+        income: movements.income,
+        openingAmount: Number(session.openingAmount),
+      },
+      session: this.toSessionDto(session),
+    };
+  }
+
+  async addCashSessionBalance(id: string, input: AddCashSessionBalanceInput): Promise<CashSessionDto> {
+    const amount = this.roundMoney(input.amount);
+
+    if (!Number.isFinite(input.amount) || amount <= 0) {
+      throw new BadRequestException('El monto debe ser mayor a cero');
+    }
+
+    if (!input.userId?.trim()) {
+      throw new BadRequestException('El responsable de boveda es obligatorio');
+    }
+
+    const organization = await this.getOrganization();
+    await this.ensureCashSetup(organization.id);
+    const responsible = await this.prisma.appUser.findFirst({
+      where: { id: input.userId, isActive: true, organizationId: organization.id, role: 'ADMIN' },
+    });
+
+    if (!responsible) {
+      throw new BadRequestException('Solo administrador puede adicionar saldo desde boveda');
+    }
+
+    const vaultStatus = await this.getVaultStatus();
+
+    if (!vaultStatus.isOpen) {
+      throw new BadRequestException('La boveda debe estar abierta');
+    }
+
+    const currentAmount = await this.getExpectedCashSessionAmount(id, organization.id);
+    const maxCashBoxBalance = await this.getMaxCashBoxBalance(organization.id);
+
+    if (currentAmount + amount > maxCashBoxBalance) {
+      throw new BadRequestException(`El saldo supera el maximo de caja de S/ ${maxCashBoxBalance}`);
+    }
+
+    const vault = await this.ensureVault(organization.id);
+    await this.prisma.cashMovement.create({
+      data: {
+        amount,
+        cashSessionId: id,
+        description: `Saldo adicionado desde boveda por ${responsible.fullName}`,
+        direction: 'IN',
+        reference: `VAULT-${Date.now()}`,
+        type: 'WITHDRAWAL_FROM_VAULT',
+        userId: responsible.id,
+        vaultId: vault.id,
+      },
+    });
+
+    const sessions = await this.findSessions();
+    const session = sessions.find((currentSession) => currentSession.id === id);
+
+    if (!session) {
+      throw new BadRequestException('La caja abierta no existe');
+    }
+
+    return session;
   }
 
   private async getOrganization() {
@@ -468,6 +561,67 @@ export class CashService {
       `,
       organizationId,
     );
+  }
+
+  private async getCashMovementTotals(sessionId: string) {
+    const totals = await this.prisma.$queryRawUnsafe<CashMovementTotalsRecord[]>(
+      `
+        SELECT
+          COALESCE(SUM(amount) FILTER (WHERE direction = 'IN'::"CashMovementDirection"), 0) AS income,
+          COALESCE(SUM(amount) FILTER (WHERE direction = 'OUT'::"CashMovementDirection"), 0) AS expenses
+        FROM cash_movements
+        WHERE "cashSessionId" = $1::uuid
+      `,
+      sessionId,
+    );
+
+    return {
+      expenses: Number(totals[0]?.expenses ?? 0),
+      income: Number(totals[0]?.income ?? 0),
+    };
+  }
+
+  private async findTodayCashCloseReports(organizationId: string) {
+    const reports = await this.prisma.$queryRawUnsafe<CashCloseReportRecord[]>(
+      `
+        SELECT
+          cb.name AS "cashBox",
+          au."fullName" AS cashier,
+          cs."closedAt",
+          cs."openingAmount",
+          cs."expectedAmount",
+          cs."countedAmount",
+          cs.difference,
+          COALESCE(SUM(cm.amount) FILTER (WHERE cm.direction = 'IN'::"CashMovementDirection"), 0) AS income,
+          COALESCE(SUM(cm.amount) FILTER (WHERE cm.direction = 'OUT'::"CashMovementDirection"), 0) AS expenses
+        FROM cash_sessions cs
+        INNER JOIN cash_boxes cb ON cb.id = cs."cashBoxId"
+        INNER JOIN app_users au ON au.id = cs."userId"
+        LEFT JOIN cash_movements cm ON cm."cashSessionId" = cs.id
+        WHERE cb."organizationId" = $1::uuid
+          AND cs.status = 'CLOSED'::"CashSessionStatus"
+          AND cs."closedAt" >= date_trunc('day', now())
+        GROUP BY cs.id, cb.name, au."fullName"
+        ORDER BY cs."closedAt" ASC
+      `,
+      organizationId,
+    );
+
+    return reports.map((report) => ({
+      cashBox: report.cashBox,
+      cashier: report.cashier,
+      closedAt: report.closedAt.toISOString(),
+      countedAmount: Number(report.countedAmount),
+      difference: Number(report.difference),
+      expectedAmount: Number(report.expectedAmount),
+      expenses: Number(report.expenses),
+      income: Number(report.income),
+      openingAmount: Number(report.openingAmount),
+    }));
+  }
+
+  private sumReportField<T>(reports: T[], field: keyof T) {
+    return this.roundMoney(reports.reduce((total, report) => total + Number(report[field] ?? 0), 0));
   }
 
   private async getMaxCashBoxBalance(organizationId: string) {
@@ -628,6 +782,7 @@ export class CashService {
       id: session.id,
       openingAmount: Number(session.openingAmount),
       status: session.status === 'CLOSED' ? 'CLOSED' : 'OPEN',
+      userId: session.userId,
     };
   }
 
@@ -654,6 +809,7 @@ export class CashService {
 
 interface CashSessionRecord {
   id: string;
+  userId: string;
   cashBox: string;
   cashier: string;
   countedAmount: unknown | null;
@@ -688,5 +844,22 @@ interface UnclosedCashBoxRecord {
   cashBox: string;
   cashier: string;
   openedAt: Date;
+  openingAmount: unknown;
+}
+
+interface CashMovementTotalsRecord {
+  expenses: unknown;
+  income: unknown;
+}
+
+interface CashCloseReportRecord {
+  cashBox: string;
+  cashier: string;
+  closedAt: Date;
+  countedAmount: unknown;
+  difference: unknown;
+  expectedAmount: unknown;
+  expenses: unknown;
+  income: unknown;
   openingAmount: unknown;
 }

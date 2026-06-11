@@ -3,6 +3,7 @@ import { Badge } from '../../common/components/Badge';
 import { Button } from '../../common/components/Button';
 import { hasRole, useAuth } from '../../common/auth/AuthProvider';
 import { formatDueDate, formatMoney, formatPercentage } from '../../common/lib/format';
+import { escapePrintHtml, getPrintBrandMarkup, getPrintBrandStyles, printDocument } from '../../common/lib/print';
 import { PageHeader } from '../../common/layout/PageHeader';
 import { clientStatusOptions, initialClientFilters, initialClientForm } from './data';
 import { useClientCredits, useClients } from './hooks';
@@ -14,10 +15,14 @@ export const ClientesView: React.FC = () => {
   const { clients, createClient, error, isCreating, isLoading, isUpdating, refetch, updateClient } = useClients();
   const {
     credits,
+    disbursement,
+    disburseCredit,
     error: creditsError,
     fetchCredits,
+    isDisbursing,
     isLoading: isLoadingCredits,
     isPaying,
+    openCashSessions,
     payInstallments,
     voucher,
   } = useClientCredits();
@@ -26,7 +31,8 @@ export const ClientesView: React.FC = () => {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [selectedCreditId, setSelectedCreditId] = useState<string | null>(null);
-  const [selectedScheduleIds, setSelectedScheduleIds] = useState<Record<string, string[]>>({});
+  const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState('');
   const isEditMode = Boolean(selectedClient);
 
   useEffect(() => {
@@ -42,8 +48,12 @@ export const ClientesView: React.FC = () => {
   }, [credits]);
 
   const selectedCredit = credits?.find((credit) => credit.id === selectedCreditId) ?? null;
-  const selectedIds = selectedCredit ? selectedScheduleIds[selectedCredit.id] ?? [] : [];
+  const parsedPaymentAmount = Number(paymentAmount);
+  const isPaymentAmountValid = Number.isFinite(parsedPaymentAmount) && parsedPaymentAmount > 0;
   const canPayInstallments = hasRole(user, ['ADMIN', 'CASHIER']);
+  const canDisburseCredits = hasRole(user, ['ADMIN', 'CASHIER']);
+  const ownOpenCashSession = user ? openCashSessions?.find((session) => session.userId === user.id) ?? null : null;
+  const isSelectedCreditDisbursed = selectedCredit?.status === 'ACTIVE' || selectedCredit?.status === 'OVERDUE';
 
   const handleChange = (field: keyof ClientFormState, value: string) => {
     setForm((currentForm) => ({
@@ -62,7 +72,8 @@ export const ClientesView: React.FC = () => {
   const handleCreateClick = () => {
     setSelectedClient(null);
     setSelectedCreditId(null);
-    setSelectedScheduleIds({});
+    setSelectedScheduleId(null);
+    setPaymentAmount('');
     setForm(initialClientForm);
     setIsFormOpen(true);
   };
@@ -77,37 +88,30 @@ export const ClientesView: React.FC = () => {
   const handleSelectClient = (client: Client) => {
     setSelectedClient(client);
     setSelectedCreditId(null);
-    setSelectedScheduleIds({});
+    setSelectedScheduleId(null);
+    setPaymentAmount('');
     void fetchCredits(client.id);
-  };
-
-  const handleScheduleToggle = (creditId: string, scheduleId: string, checked: boolean) => {
-    if (!canPayInstallments) return;
-
-    setSelectedScheduleIds((currentValue) => {
-      const currentIds = currentValue[creditId] ?? [];
-      const nextIds = checked ? [...currentIds, scheduleId] : currentIds.filter((id) => id !== scheduleId);
-
-      return {
-        ...currentValue,
-        [creditId]: nextIds,
-      };
-    });
   };
 
   const handlePayInstallments = async () => {
     if (!canPayInstallments) return;
     if (!selectedCredit) return;
     if (!user) return;
+    if (!isPaymentAmountValid) return;
+    if (!isSelectedCreditDisbursed) return;
 
-    const paid = await payInstallments(selectedCredit.id, selectedIds, user.id);
+    const paid = await payInstallments(selectedCredit.id, parsedPaymentAmount, user.id);
 
     if (!paid) return;
+    setSelectedScheduleId(null);
+    setPaymentAmount('');
+  };
 
-    setSelectedScheduleIds((currentValue) => ({
-      ...currentValue,
-      [selectedCredit.id]: [],
-    }));
+  const handleDisburseCredit = async (creditId: string) => {
+    if (!canDisburseCredits) return;
+    if (!user) return;
+
+    await disburseCredit(creditId, user.id);
   };
 
   const getSubmitLabel = () => {
@@ -127,7 +131,8 @@ export const ClientesView: React.FC = () => {
 
       setSelectedClient(null);
       setSelectedCreditId(null);
-      setSelectedScheduleIds({});
+      setSelectedScheduleId(null);
+      setPaymentAmount('');
       setForm(initialClientForm);
       setIsFormOpen(false);
       return;
@@ -327,7 +332,7 @@ export const ClientesView: React.FC = () => {
         </div>
       ) : null}
       {selectedClient ? (
-        <section className="grid grid--two">
+        <section className="grid">
           <div className="card">
             <div className="card__header">
               <div>
@@ -337,6 +342,11 @@ export const ClientesView: React.FC = () => {
             </div>
             <div className="card__body">
               {creditsError ? <p className="message--error">{creditsError}</p> : null}
+              {disbursement ? (
+                <p>
+                  Credito {disbursement.creditCode} desembolsado desde {disbursement.cashBox}: {formatMoney(disbursement.amount)}
+                </p>
+              ) : null}
               {isLoadingCredits ? <p>Cargando creditos...</p> : null}
               {!isLoadingCredits && !credits?.length ? <p>No hay creditos aprobados.</p> : null}
               {credits?.length ? (
@@ -345,10 +355,13 @@ export const ClientesView: React.FC = () => {
                     <thead>
                       <tr>
                         <th>Codigo</th>
-                        <th>Total</th>
+                        <th>Monto credito</th>
                         <th>Interes</th>
                         <th>Mora</th>
                         <th>Valor neto</th>
+                        <th>Estado</th>
+                        <th>Caja desembolso</th>
+                        <th>Accion</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -358,17 +371,30 @@ export const ClientesView: React.FC = () => {
                           key={credit.id}
                           onClick={() => {
                             setSelectedCreditId(credit.id);
-                            setSelectedScheduleIds((currentValue) => ({
-                              ...currentValue,
-                              [credit.id]: [],
-                            }));
+                            setSelectedScheduleId(null);
+                            setPaymentAmount('');
                           }}
                         >
                           <td>{credit.code}</td>
-                          <td className="money">{formatMoney(credit.totalAmount)}</td>
+                          <td className="money">{formatMoney(credit.principalAmount)}</td>
                           <td>{formatPercentage(credit.interestRate)}</td>
                           <td className="money">{formatMoney(credit.overdueAmount)}</td>
                           <td className="money">{formatMoney(credit.netValue)}</td>
+                          <td>{credit.status}</td>
+                          <td>{credit.disbursementCashBox ?? ''}</td>
+                          <td onClick={(event) => event.stopPropagation()}>
+                            {credit.status === 'APPROVED' ? (
+                              <Button
+                                className="button--compact"
+                                disabled={!canDisburseCredits || !ownOpenCashSession || isDisbursing}
+                                onClick={() => void handleDisburseCredit(credit.id)}
+                              >
+                                Desembolsar
+                              </Button>
+                            ) : (
+                              '-'
+                            )}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -383,9 +409,6 @@ export const ClientesView: React.FC = () => {
                 <h2 className="card__title">Detalle de cuotas</h2>
                 <p className="card__description">{selectedCredit ? selectedCredit.code : 'Sin credito seleccionado'}</p>
               </div>
-              <Button className="button--compact" disabled={!canPayInstallments || !selectedIds.length || isPaying} onClick={() => void handlePayInstallments()}>
-                Pagar
-              </Button>
             </div>
             <div className="card__body">
               {voucher ? (
@@ -402,41 +425,68 @@ export const ClientesView: React.FC = () => {
                 </div>
               ) : null}
               {!canPayInstallments ? <p className="message--error">No autorizado para pagar cuotas.</p> : null}
+              {selectedCredit && !isSelectedCreditDisbursed ? <p className="message--error">Credito debe estar desembolsado para registrar pagos.</p> : null}
+              {selectedCredit && canPayInstallments && !ownOpenCashSession ? <p className="message--error">Perfil debe tener una caja abierta para registrar pagos.</p> : null}
+              {selectedCredit && canPayInstallments && isSelectedCreditDisbursed && ownOpenCashSession ? (
+                <div className="inline-form">
+                  <div className="field">
+                    <label htmlFor="paymentAmount">Monto a pagar</label>
+                    <input
+                      id="paymentAmount"
+                      min="0.01"
+                      onChange={(event) => {
+                        setSelectedScheduleId(null);
+                        setPaymentAmount(event.target.value);
+                      }}
+                      placeholder="S/ 0.00"
+                      step="0.01"
+                      type="number"
+                      value={paymentAmount}
+                    />
+                  </div>
+                  <Button disabled={!isPaymentAmountValid || isPaying} onClick={() => void handlePayInstallments()}>
+                    {isPaying ? 'Pagando...' : 'Pagar'}
+                  </Button>
+                </div>
+              ) : null}
               {selectedCredit ? (
                 <div className="table-wrap">
                   <table className="table">
                     <thead>
                       <tr>
-                        <th>Pagar</th>
                         <th>Cuota</th>
                         <th>Vence</th>
                         <th>Capital</th>
                         <th>Interes</th>
                         <th>Mora</th>
                         <th>Total</th>
+                        <th>Pagado</th>
+                        <th>Saldo</th>
                         <th>Estado</th>
                       </tr>
                     </thead>
                     <tbody>
                       {selectedCredit.schedules.map((schedule) => {
-                        const isPaid = schedule.status === 'PAID';
+                        const pendingAmount = Math.max(0, schedule.totalDue + schedule.penalty - schedule.paidAmount);
 
                         return (
-                          <tr key={schedule.id}>
-                            <td>
-                              <input
-                                checked={selectedIds.includes(schedule.id)}
-                                disabled={isPaid || !canPayInstallments}
-                                onChange={(event) => handleScheduleToggle(selectedCredit.id, schedule.id, event.target.checked)}
-                                type="checkbox"
-                              />
-                            </td>
+                          <tr
+                            className={selectedScheduleId === schedule.id ? 'table__row--selected' : undefined}
+                            key={schedule.id}
+                            onClick={() => {
+                              if (!canPayInstallments || !ownOpenCashSession || !isSelectedCreditDisbursed || pendingAmount <= 0) return;
+                              setSelectedScheduleId(schedule.id);
+                              setPaymentAmount(pendingAmount.toFixed(2));
+                            }}
+                          >
                             <td>{schedule.installmentNo}</td>
                             <td>{formatDueDate(schedule.dueDate)}</td>
                             <td className="money">{formatMoney(schedule.principal)}</td>
                             <td className="money">{formatMoney(schedule.interest)}</td>
                             <td className="money">{formatMoney(schedule.penalty)}</td>
                             <td className="money">{formatMoney(schedule.totalDue)}</td>
+                            <td className="money">{formatMoney(schedule.paidAmount)}</td>
+                            <td className="money">{formatMoney(pendingAmount)}</td>
                             <td>{schedule.status}</td>
                           </tr>
                         );
@@ -460,22 +510,29 @@ const printVoucher = (voucher: PaymentVoucher) => {
 
   if (!printWindow) return;
 
+  const clientName = escapePrintHtml(voucher.clientName);
+  const creditCode = escapePrintHtml(voucher.creditCode);
+  const voucherCode = escapePrintHtml(voucher.voucherCode);
+
   printWindow.document.write(`
     <html>
       <head>
-        <title>${voucher.voucherCode}</title>
+        <title>${voucherCode}</title>
         <style>
           body { font-family: Arial, sans-serif; padding: 24px; color: #111; }
-          h1 { font-size: 20px; margin: 0 0 16px; }
+          h1 { font-size: 20px; margin: 20px 0 16px; }
           p { margin: 8px 0; }
+          ${getPrintBrandStyles()}
           .amount { font-size: 24px; font-weight: 700; margin-top: 18px; }
+          @media print { body { padding: 0; } }
         </style>
       </head>
       <body>
+        ${getPrintBrandMarkup(window.location.origin)}
         <h1>Voucher de pago</h1>
-        <p><strong>Codigo:</strong> ${voucher.voucherCode}</p>
-        <p><strong>Cliente:</strong> ${voucher.clientName}</p>
-        <p><strong>Credito:</strong> ${voucher.creditCode}</p>
+        <p><strong>Codigo:</strong> ${voucherCode}</p>
+        <p><strong>Cliente:</strong> ${clientName}</p>
+        <p><strong>Credito:</strong> ${creditCode}</p>
         <p><strong>Cuotas:</strong> ${voucher.scheduleNumbers.join(', ')}</p>
         <p><strong>Fecha:</strong> ${new Date(voucher.paidAt).toLocaleString('es-PE')}</p>
         <p class="amount">Total: ${formatMoney(voucher.amount)}</p>
@@ -483,6 +540,5 @@ const printVoucher = (voucher: PaymentVoucher) => {
     </html>
   `);
   printWindow.document.close();
-  printWindow.focus();
-  printWindow.print();
+  printDocument(printWindow);
 };

@@ -13,6 +13,7 @@ export interface CashSession {
   id: string;
   cashBox: string;
   cashier: string;
+  userId: string;
   closingDenominations?: CashDenominationCount[];
   denominations?: CashDenominationCount[];
   openingAmount: number;
@@ -40,4 +41,28 @@ export interface UnclosedCashBox {
   cashier: string;
   openedAt: string;
   openingAmount: number;
+}
+
+export interface CashCloseReport {
+  cashBox: string;
+  cashier: string;
+  closedAt: string;
+  countedAmount: number;
+  difference: number;
+  expectedAmount: number;
+  expenses: number;
+  income: number;
+  openingAmount: number;
+}
+
+export interface VaultCloseReport {
+  boxes: CashCloseReport[];
+  closedAt: string;
+  totalCounted: number;
+  totalDifference: number;
+  totalExpected: number;
+  totalExpenses: number;
+  totalIncome: number;
+  totalOpening: number;
+  vaultName: string;
 }

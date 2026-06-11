@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { CreditStatus, CreditType, DocumentType, PaymentMethod, PaymentStatus, StorageProvider, UserRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import type { CreateCreditInput, CreditSimulationInput, CreditSimulationResult, PayInstallmentsInput } from './credits.types';
+import type { CreateCreditInput, CreditSimulationInput, CreditSimulationResult, DisburseCreditInput, PayInstallmentsInput } from './credits.types';
 
 const demoOrganization = {
   clerkOrganizationId: 'org_demo_solfin',
@@ -192,6 +192,12 @@ export class CreditsService {
 
     const credits = await this.prisma.credit.findMany({
       include: {
+        cashMovements: {
+          include: { cashSession: { include: { cashBox: true } } },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          where: { type: 'CREDIT_DISBURSEMENT' },
+        },
         schedules: { orderBy: { installmentNo: 'asc' } },
       },
       orderBy: { createdAt: 'desc' },
@@ -211,6 +217,7 @@ export class CreditsService {
 
       return {
         code: credit.code,
+        disbursementCashBox: credit.cashMovements[0]?.cashSession.cashBox.name ?? null,
         id: credit.id,
         installmentAmount: Number(credit.installmentAmount),
         interestRate: Number(credit.interestRate),
@@ -236,8 +243,10 @@ export class CreditsService {
   }
 
   async payInstallments(creditId: string, input: PayInstallmentsInput) {
-    if (!input.scheduleIds?.length) {
-      throw new BadRequestException('Seleccione al menos una cuota');
+    const paymentAmount = this.roundMoney(input.amount);
+
+    if (!Number.isFinite(input.amount) || paymentAmount <= 0) {
+      throw new BadRequestException('El monto debe ser mayor a cero');
     }
 
     if (!input.userId?.trim()) {
@@ -254,16 +263,20 @@ export class CreditsService {
       throw new NotFoundException('Credito no encontrado');
     }
 
+    if (credit.status !== CreditStatus.ACTIVE && credit.status !== CreditStatus.OVERDUE) {
+      throw new BadRequestException('El credito debe estar desembolsado para registrar pagos');
+    }
+
     const schedules = await this.prisma.paymentSchedule.findMany({
+      orderBy: { installmentNo: 'asc' },
       where: {
         creditId,
-        id: { in: input.scheduleIds },
         status: { in: [PaymentStatus.PENDING, PaymentStatus.PARTIAL, PaymentStatus.OVERDUE] },
       },
     });
 
     if (!schedules.length) {
-      throw new BadRequestException('No hay cuotas pendientes seleccionadas');
+      throw new BadRequestException('No hay cuotas pendientes');
     }
 
     const cashSession = await this.findOpenCashSession(organization.id, input.userId);
@@ -272,11 +285,28 @@ export class CreditsService {
       throw new BadRequestException('Debe tener una caja abierta para registrar pagos');
     }
 
+    const totalPending = this.roundMoney(
+      schedules.reduce((total, schedule) => total + Number(schedule.totalDue) + Number(schedule.penalty) - Number(schedule.paidAmount), 0),
+    );
+
+    if (paymentAmount > totalPending) {
+      throw new BadRequestException(`El monto supera la deuda pendiente de S/ ${totalPending.toFixed(2)}`);
+    }
+
+    const appliedSchedules: number[] = [];
+    let remainingAmount = paymentAmount;
+
     await this.prisma.$transaction(async (tx) => {
       for (const schedule of schedules) {
+        if (remainingAmount <= 0) break;
+
+        const schedulePending = this.roundMoney(Number(schedule.totalDue) + Number(schedule.penalty) - Number(schedule.paidAmount));
+        const appliedAmount = this.roundMoney(Math.min(remainingAmount, schedulePending));
+        const newPaidAmount = this.roundMoney(Number(schedule.paidAmount) + appliedAmount);
+        const isPaid = newPaidAmount >= Number(schedule.totalDue) + Number(schedule.penalty);
         const payment = await tx.payment.create({
           data: {
-            amount: schedule.totalDue,
+            amount: appliedAmount,
             creditId,
             method: PaymentMethod.CASH,
             paymentScheduleId: schedule.id,
@@ -285,16 +315,16 @@ export class CreditsService {
 
         await tx.paymentSchedule.update({
           data: {
-            paidAmount: schedule.totalDue,
-            paidAt: new Date(),
-            status: PaymentStatus.PAID,
+            paidAmount: newPaidAmount,
+            paidAt: isPaid ? new Date() : null,
+            status: isPaid ? PaymentStatus.PAID : PaymentStatus.PARTIAL,
           },
           where: { id: schedule.id },
         });
 
         await tx.cashMovement.create({
           data: {
-            amount: schedule.totalDue,
+            amount: appliedAmount,
             cashSessionId: cashSession.id,
             creditId,
             description: `Pago cuota ${schedule.installmentNo} credito ${credit.code}`,
@@ -305,22 +335,134 @@ export class CreditsService {
             userId: input.userId,
           },
         });
+
+        appliedSchedules.push(schedule.installmentNo);
+        remainingAmount = this.roundMoney(remainingAmount - appliedAmount);
       }
     });
 
     const credits = await this.findApprovedByClient(credit.clientId);
-    const amount = schedules.reduce((total, schedule) => total + Number(schedule.totalDue), 0);
 
     return {
       credits,
       voucher: {
-        amount,
+        amount: paymentAmount,
         clientName: `${credit.client.firstName} ${credit.client.lastName}`,
         creditCode: credit.code,
         paidAt: new Date().toISOString(),
-        scheduleNumbers: schedules.map((schedule) => schedule.installmentNo).sort((a, b) => a - b),
+        scheduleNumbers: appliedSchedules,
         voucherCode: `VCH-${Date.now()}`,
       },
+    };
+  }
+
+  async disburse(creditId: string, input: DisburseCreditInput) {
+    if (!input.userId?.trim()) {
+      throw new BadRequestException('El responsable del desembolso es obligatorio');
+    }
+
+    const organization = await this.getOrganization();
+    const responsible = await this.prisma.appUser.findFirst({
+      where: {
+        id: input.userId,
+        isActive: true,
+        organizationId: organization.id,
+        role: { in: [UserRole.ADMIN, UserRole.CASHIER] },
+      },
+    });
+
+    if (!responsible) {
+      throw new BadRequestException('No autorizado para desembolsar creditos');
+    }
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const credit = await tx.credit.findFirst({
+        where: { id: creditId, organizationId: organization.id },
+      });
+
+      if (!credit) {
+        throw new NotFoundException('Credito no encontrado');
+      }
+
+      if (credit.status !== CreditStatus.APPROVED || credit.disbursedAt) {
+        throw new BadRequestException('El credito no esta disponible para desembolso');
+      }
+
+      const cashSession = await tx.cashSession.findFirst({
+        include: { cashBox: true },
+        orderBy: { openedAt: 'desc' },
+        where: {
+          cashBox: { organizationId: organization.id },
+          status: 'OPEN',
+          userId: responsible.id,
+        },
+      });
+
+      if (!cashSession) {
+        throw new BadRequestException('Debe tener una caja abierta para desembolsar');
+      }
+
+      const available = await tx.$queryRawUnsafe<Array<{ availableAmount: unknown }>>(
+        `
+          SELECT cs."openingAmount" + COALESCE(SUM(
+            CASE WHEN cm.direction = 'IN'::"CashMovementDirection" THEN cm.amount ELSE -cm.amount END
+          ), 0) AS "availableAmount"
+          FROM cash_sessions cs
+          LEFT JOIN cash_movements cm ON cm."cashSessionId" = cs.id
+          WHERE cs.id = $1::uuid
+            AND cs.status = 'OPEN'::"CashSessionStatus"
+          GROUP BY cs.id
+        `,
+        cashSession.id,
+      );
+      const availableAmount = Number(available[0]?.availableAmount ?? 0);
+      const disbursementAmount = Number(credit.principalAmount);
+
+      if (availableAmount < disbursementAmount) {
+        throw new BadRequestException(`Efectivo insuficiente en caja. Disponible S/ ${availableAmount.toFixed(2)}`);
+      }
+
+      await tx.cashMovement.create({
+        data: {
+          amount: disbursementAmount,
+          cashSessionId: cashSession.id,
+          creditId: credit.id,
+          description: `Desembolso credito ${credit.code}`,
+          direction: 'OUT',
+          reference: credit.code,
+          type: 'CREDIT_DISBURSEMENT',
+          userId: responsible.id,
+        },
+      });
+      await tx.credit.update({
+        data: { disbursedAt: new Date(), status: CreditStatus.ACTIVE },
+        where: { id: credit.id },
+      });
+      await tx.creditStatusHistory.create({
+        data: {
+          changedById: responsible.id,
+          creditId: credit.id,
+          fromStatus: CreditStatus.APPROVED,
+          notes: `Desembolsado desde caja ${cashSession.cashBox.name}`,
+          toStatus: CreditStatus.ACTIVE,
+        },
+      });
+
+      return {
+        clientId: credit.clientId,
+        disbursement: {
+          amount: disbursementAmount,
+          cashBox: cashSession.cashBox.name,
+          cashSessionId: cashSession.id,
+          creditCode: credit.code,
+          disbursedAt: new Date().toISOString(),
+        },
+      };
+    }, { isolationLevel: 'Serializable' });
+
+    return {
+      credits: await this.findApprovedByClient(result.clientId),
+      disbursement: result.disbursement,
     };
   }
 
@@ -337,6 +479,7 @@ export class CreditsService {
 
     return sessions[0] ?? null;
   }
+
 
   private async getOrganization() {
     return this.prisma.organization.upsert({

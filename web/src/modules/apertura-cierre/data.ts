@@ -30,6 +30,7 @@ export const cashSessions: CashSession[] = [
     id: 'CAJ-001',
     openingAmount: 3000,
     status: 'OPEN',
+    userId: 'user_demo_cashier',
   },
   {
     cashBox: 'Caja auxiliar',
@@ -44,5 +45,6 @@ export const cashSessions: CashSession[] = [
     id: 'CAJ-002',
     openingAmount: 1500,
     status: 'CLOSED',
+    userId: 'user_demo_cashier_2',
   },
 ];
