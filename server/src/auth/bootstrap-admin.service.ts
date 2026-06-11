@@ -60,6 +60,8 @@ export class BootstrapAdminService implements OnModuleInit {
         role: UserRole.ADMIN,
       },
       update: {
+        email,
+        fullName: this.configService.get<string>('BOOTSTRAP_ADMIN_NAME') ?? 'Administrador SOLFIN',
         isActive: true,
         passwordHash: `pbkdf2$${iterations}$${salt}$${hash}`,
         role: UserRole.ADMIN,
