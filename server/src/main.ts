@@ -1,6 +1,9 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 
+const productionOrigins = ['https://solfin-web-pilot.onrender.com'];
+const developmentOrigins = ['http://localhost:3000', 'http://127.0.0.1:3000'];
+
 const normalizeOrigin = (origin: string) => {
   const trimmed = origin.trim().replace(/^['"]|['"]$/g, '');
 
@@ -10,10 +13,10 @@ const normalizeOrigin = (origin: string) => {
 
 const getAllowedOrigins = () => {
   const frontendUrl = process.env.FRONTEND_URL;
+  const configuredOrigins = frontendUrl?.split(',').map(normalizeOrigin).filter(Boolean) ?? [];
 
-  if (frontendUrl) return frontendUrl.split(',').map(normalizeOrigin).filter(Boolean);
-  if (process.env.NODE_ENV === 'production') throw new Error('FRONTEND_URL is required');
-  return ['http://localhost:3000', 'http://127.0.0.1:3000'];
+  if (process.env.NODE_ENV === 'production') return [...new Set([...productionOrigins, ...configuredOrigins])];
+  return [...new Set([...developmentOrigins, ...configuredOrigins])];
 };
 
 const bootstrap = async () => {
