@@ -3,9 +3,8 @@ services:
     name: solfin-api-pilot
     runtime: node
     plan: free
-    rootDir: server
-    buildCommand: npm install && npm run prisma:generate && npm run build
-    startCommand: npm run start
+    buildCommand: npm ci --include=dev && npm run prisma:generate && npm run build:server
+    startCommand: npm --prefix server run start
     healthCheckPath: /health
     autoDeployTrigger: commit
     envVars:
@@ -27,8 +26,7 @@ services:
   - type: web
     name: solfin-web-pilot
     runtime: static
-    rootDir: web
-    buildCommand: npm install && npm run build
+    buildCommand: npm ci --include=dev && npm run build:web
     staticPublishPath: web/build
     autoDeployTrigger: commit
     envVars:
