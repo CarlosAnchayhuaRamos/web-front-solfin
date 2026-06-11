@@ -1,8 +1,9 @@
-import { randomBytes, pbkdf2Sync } from 'crypto';
+import { randomBytes, pbkdf2Sync, timingSafeEqual } from 'crypto';
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { UserRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import type { AuthUserDto } from './auth.types';
 
 @Injectable()
 export class BootstrapAdminService implements OnModuleInit {
@@ -31,6 +32,30 @@ export class BootstrapAdminService implements OnModuleInit {
       throw new Error('BOOTSTRAP_ADMIN_EMAIL is required when BOOTSTRAP_ADMIN_PASSWORD is set');
     }
 
+    await this.upsertAdmin(email, password);
+    this.logger.log(`Bootstrap admin actualizado: ${email}`);
+  }
+
+  async authenticate(identifier: string, password: string): Promise<AuthUserDto | null> {
+    const configuredEmail = this.normalizeEnvironmentValue(this.configService.get<string>('BOOTSTRAP_ADMIN_EMAIL'))?.toLowerCase();
+    const configuredPassword = this.normalizeEnvironmentValue(this.configService.get<string>('BOOTSTRAP_ADMIN_PASSWORD'));
+
+    if (!configuredEmail || !configuredPassword) return null;
+    if (identifier !== configuredEmail) return null;
+    if (!this.secureEquals(password, configuredPassword)) return null;
+
+    const admin = await this.upsertAdmin(configuredEmail, configuredPassword);
+
+    return {
+      dni: admin.dni ?? '',
+      email: admin.email,
+      fullName: admin.fullName,
+      id: admin.id,
+      role: admin.role,
+    };
+  }
+
+  private async upsertAdmin(email: string, password: string) {
     const organization = await this.prisma.organization.upsert({
       create: {
         clerkOrganizationId: 'org_demo_solfin',
@@ -55,7 +80,7 @@ export class BootstrapAdminService implements OnModuleInit {
       },
     });
 
-    await this.prisma.appUser.upsert({
+    return this.prisma.appUser.upsert({
       create: {
         email,
         fullName: this.configService.get<string>('BOOTSTRAP_ADMIN_NAME') ?? 'Administrador SOLFIN',
@@ -73,8 +98,6 @@ export class BootstrapAdminService implements OnModuleInit {
       },
       where: { id: existingAdmin?.id ?? 'user_bootstrap_admin' },
     });
-
-    this.logger.log(`Bootstrap admin actualizado: ${email}`);
   }
 
   private normalizeEnvironmentValue(value: string | undefined) {
@@ -84,5 +107,13 @@ export class BootstrapAdminService implements OnModuleInit {
     if (trimmed.startsWith('"') && trimmed.endsWith('"')) return trimmed.slice(1, -1);
     if (trimmed.startsWith("'") && trimmed.endsWith("'")) return trimmed.slice(1, -1);
     return trimmed;
+  }
+
+  private secureEquals(value: string, expected: string) {
+    const valueBuffer = Buffer.from(value);
+    const expectedBuffer = Buffer.from(expected);
+
+    if (valueBuffer.length !== expectedBuffer.length) return false;
+    return timingSafeEqual(valueBuffer, expectedBuffer);
   }
 }

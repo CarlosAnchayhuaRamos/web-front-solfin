@@ -1,6 +1,13 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 
+const normalizeOrigin = (origin: string) => {
+  const trimmed = origin.trim().replace(/^['"]|['"]$/g, '');
+
+  if (!trimmed) return '';
+  return trimmed.replace(/\/+$/, '');
+};
+
 const bootstrap = async () => {
   const app = await NestFactory.create(AppModule);
   const port = Number(process.env.PORT ?? 4000);
@@ -15,7 +22,7 @@ const bootstrap = async () => {
   }
 
   app.enableCors({
-    origin: frontendUrl.split(',').map((origin) => origin.trim()),
+    origin: frontendUrl.split(',').map(normalizeOrigin).filter(Boolean),
     credentials: true,
   });
 
