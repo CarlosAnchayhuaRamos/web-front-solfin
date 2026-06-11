@@ -1,26 +1,31 @@
 import { randomBytes, pbkdf2Sync } from 'crypto';
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { UserRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class BootstrapAdminService implements OnModuleInit {
+  private readonly logger = new Logger(BootstrapAdminService.name);
+
   constructor(
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
   ) {}
 
   async onModuleInit() {
-    const password = this.configService.get<string>('BOOTSTRAP_ADMIN_PASSWORD');
+    const password = this.normalizeEnvironmentValue(this.configService.get<string>('BOOTSTRAP_ADMIN_PASSWORD'));
 
-    if (!password) return;
+    if (!password) {
+      this.logger.warn('Bootstrap admin omitido: BOOTSTRAP_ADMIN_PASSWORD no configurado');
+      return;
+    }
 
     if (password.length < 12) {
       throw new Error('BOOTSTRAP_ADMIN_PASSWORD must contain at least 12 characters');
     }
 
-    const email = this.configService.get<string>('BOOTSTRAP_ADMIN_EMAIL')?.trim().toLowerCase();
+    const email = this.normalizeEnvironmentValue(this.configService.get<string>('BOOTSTRAP_ADMIN_EMAIL'))?.toLowerCase();
 
     if (!email) {
       throw new Error('BOOTSTRAP_ADMIN_EMAIL is required when BOOTSTRAP_ADMIN_PASSWORD is set');
@@ -68,5 +73,16 @@ export class BootstrapAdminService implements OnModuleInit {
       },
       where: { id: existingAdmin?.id ?? 'user_bootstrap_admin' },
     });
+
+    this.logger.log(`Bootstrap admin actualizado: ${email}`);
+  }
+
+  private normalizeEnvironmentValue(value: string | undefined) {
+    const trimmed = value?.trim();
+
+    if (!trimmed) return undefined;
+    if (trimmed.startsWith('"') && trimmed.endsWith('"')) return trimmed.slice(1, -1);
+    if (trimmed.startsWith("'") && trimmed.endsWith("'")) return trimmed.slice(1, -1);
+    return trimmed;
   }
 }

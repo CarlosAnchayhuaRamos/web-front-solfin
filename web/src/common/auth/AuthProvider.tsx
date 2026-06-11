@@ -56,7 +56,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
 
       if (!response.ok) {
-        setError('Credenciales invalidas');
+        setError(await getLoginError(response));
         setIsAuthenticated(false);
         setToken(null);
         setUser(null);
@@ -76,7 +76,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       window.localStorage.setItem(authUserKey, JSON.stringify(data.user));
       return true;
     } catch {
-      setError('Credenciales invalidas');
+      setError('No se pudo conectar con el backend');
       setIsAuthenticated(false);
       setToken(null);
       setUser(null);
@@ -110,6 +110,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+};
+
+const getLoginError = async (response: Response) => {
+  try {
+    const data = (await response.json()) as { message?: string | string[] };
+    if (Array.isArray(data.message)) return data.message.join(', ');
+    return data.message ?? 'No se pudo iniciar sesion';
+  } catch {
+    return 'No se pudo iniciar sesion';
+  }
 };
 
 export const hasRole = (user: AuthUser | null, roles: AppRole[]) => {
