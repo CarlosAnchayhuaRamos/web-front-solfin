@@ -10,12 +10,12 @@ import { CashModule } from './cash/cash.module';
 import { ClientsModule } from './clients/clients.module';
 import { CreditsModule } from './credits/credits.module';
 import { ParametersModule } from './parameters/parameters.module';
-import { PrismaService } from './prisma/prisma.service';
+import { PrismaModule } from './prisma/prisma.module';
 import { UsersModule } from './users/users.module';
 
 @Module({
-  imports: [ConfigModule.forRoot({ isGlobal: true }), AuthModule, CashModule, ClientsModule, CreditsModule, ApprovalRequestsModule, ParametersModule, UsersModule],
+  imports: [ConfigModule.forRoot({ isGlobal: true }), PrismaModule, AuthModule, CashModule, ClientsModule, CreditsModule, ApprovalRequestsModule, ParametersModule, UsersModule],
   controllers: [AppController],
-  providers: [AppService, PrismaService, { provide: APP_GUARD, useClass: AuthGuard }],
+  providers: [AppService, { provide: APP_GUARD, useClass: AuthGuard }],
 })
 export class AppModule {}

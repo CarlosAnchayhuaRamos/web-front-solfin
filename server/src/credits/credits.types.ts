@@ -42,6 +42,7 @@ export interface PaymentVoucher {
   clientName: string;
   creditCode: string;
   paidAt: string;
+  remainingBalance: number;
   scheduleNumbers: number[];
   voucherCode: string;
 }

@@ -142,16 +142,45 @@ export class CashService {
   }
 
   async assignCashBox(id: string, input: AssignCashBoxInput): Promise<CashBoxDto> {
-    if (!input.cashierId?.trim()) {
-      throw new BadRequestException('El cajero es obligatorio');
-    }
-
     const organization = await this.getOrganization();
     await this.ensureCashSetup(organization.id);
+
+    if (!input.cashierId?.trim()) {
+      const unassignedBoxes = await this.prisma.$queryRawUnsafe<CashBoxRecord[]>(
+        `
+          UPDATE cash_boxes
+          SET "assignedUserId" = NULL,
+              "updatedAt" = now()
+          WHERE id = $1::uuid AND "organizationId" = $2::uuid
+          RETURNING id, name, "isActive", NULL::text AS "assignedCashierId", NULL::text AS "assignedCashierName"
+        `,
+        id,
+        organization.id,
+      );
+
+      if (!unassignedBoxes[0]) {
+        throw new BadRequestException('La caja no existe');
+      }
+
+      return this.toCashBoxDto(unassignedBoxes[0]);
+    }
+
     const cashier = await this.findCashierById(organization.id, input.cashierId);
 
     if (!cashier) {
       throw new BadRequestException('El cajero no existe o no esta activo');
+    }
+
+    const existingAssignment = await this.prisma.cashBox.findFirst({
+      where: {
+        assignedUserId: input.cashierId,
+        id: { not: id },
+        organizationId: organization.id,
+      },
+    });
+
+    if (existingAssignment) {
+      throw new BadRequestException(`El cajero ya esta asignado a ${existingAssignment.name}`);
     }
 
     const boxes = await this.prisma.$queryRawUnsafe<CashBoxRecord[]>(

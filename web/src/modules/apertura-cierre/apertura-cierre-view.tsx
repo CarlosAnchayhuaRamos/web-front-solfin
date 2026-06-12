@@ -244,11 +244,19 @@ export const AperturaCierreView: React.FC = () => {
                               value={box.assignedCashierId ?? ''}
                             >
                               <option value="">Sin asignar</option>
-                              {cash.cashiers?.map((cashier) => (
-                                <option key={cashier.id} value={cashier.id}>
-                                  {cashier.fullName}
-                                </option>
-                              ))}
+                              {cash.cashiers
+                                ?.filter(
+                                  (cashier) =>
+                                    cashier.id === box.assignedCashierId ||
+                                    !cash.boxes?.some(
+                                      (assignedBox) => assignedBox.id !== box.id && assignedBox.assignedCashierId === cashier.id,
+                                    ),
+                                )
+                                .map((cashier) => (
+                                  <option key={cashier.id} value={cashier.id}>
+                                    {cashier.fullName}
+                                  </option>
+                                ))}
                             </select>
                           </td>
                         </tr>

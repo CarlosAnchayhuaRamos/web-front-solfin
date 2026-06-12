@@ -27,7 +27,12 @@ export const ParametrosView: React.FC = () => {
     setSaveMessage(null);
     setCreditForm((currentForm) => ({
       ...currentForm,
-      [field]: field === 'defaultInterestRate' && typeof value === 'string' ? limitOneDecimal(value) : value,
+      [field]:
+        typeof value === 'string' && field === 'defaultInterestRate'
+          ? limitDecimals(value, 1)
+          : typeof value === 'string' && field === 'defaultPenaltyRate'
+            ? limitDecimals(value, 2)
+            : value,
     }));
   };
 
@@ -35,7 +40,7 @@ export const ParametrosView: React.FC = () => {
     setSaveMessage(null);
     setCashForm((currentForm) => ({
       ...currentForm,
-      [field]: value,
+      [field]: typeof value === 'string' && field === 'maxCashDifference' ? limitDecimals(value, 2) : value,
     }));
   };
 
@@ -136,7 +141,7 @@ export const ParametrosView: React.FC = () => {
                   id="defaultPenaltyRate"
                   min="0"
                   onChange={(event) => handleCreditChange('defaultPenaltyRate', event.target.value)}
-                  step="1"
+                  step="0.01"
                   type="number"
                   value={creditForm.defaultPenaltyRate}
                 />
@@ -229,7 +234,7 @@ export const ParametrosView: React.FC = () => {
                   id="maxCashDifference"
                   min="0"
                   onChange={(event) => handleCashChange('maxCashDifference', event.target.value)}
-                  step="0.1"
+                  step="0.01"
                   type="number"
                   value={cashForm.maxCashDifference}
                 />
@@ -260,9 +265,9 @@ export const ParametrosView: React.FC = () => {
   );
 };
 
-const limitOneDecimal = (value: string) => {
+const limitDecimals = (value: string, decimals: number) => {
   const [integerPart, decimalPart] = value.split('.');
 
   if (decimalPart === undefined) return value;
-  return `${integerPart}.${decimalPart.slice(0, 1)}`;
+  return `${integerPart}.${decimalPart.slice(0, decimals)}`;
 };

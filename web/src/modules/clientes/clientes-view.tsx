@@ -416,7 +416,7 @@ export const ClientesView: React.FC = () => {
                   <div>
                     <strong>{voucher.voucherCode}</strong>
                     <span>
-                      {voucher.creditCode} · cuotas {voucher.scheduleNumbers.join(', ')} · {formatMoney(voucher.amount)}
+                      {voucher.creditCode} · cuotas {voucher.scheduleNumbers.join(', ')} · saldo {formatMoney(voucher.remainingBalance)}
                     </span>
                   </div>
                   <Button className="button--compact" onClick={() => printVoucher(voucher)} variant="outline">
@@ -536,6 +536,7 @@ const printVoucher = (voucher: PaymentVoucher) => {
         <p><strong>Cuotas:</strong> ${voucher.scheduleNumbers.join(', ')}</p>
         <p><strong>Fecha:</strong> ${new Date(voucher.paidAt).toLocaleString('es-PE')}</p>
         <p class="amount">Total: ${formatMoney(voucher.amount)}</p>
+        <p><strong>Saldo pendiente:</strong> ${formatMoney(voucher.remainingBalance)}</p>
       </body>
     </html>
   `);

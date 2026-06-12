@@ -434,7 +434,7 @@ model CashBox {
   id             String   @id @default(uuid()) @db.Uuid
   organizationId String   @db.Uuid
   name           String
-  assignedUserId String?
+  assignedUserId String?       @unique
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt

@@ -350,6 +350,7 @@ export class CreditsService {
         clientName: `${credit.client.firstName} ${credit.client.lastName}`,
         creditCode: credit.code,
         paidAt: new Date().toISOString(),
+        remainingBalance: this.roundMoney(totalPending - paymentAmount),
         scheduleNumbers: appliedSchedules,
         voucherCode: `VCH-${Date.now()}`,
       },
