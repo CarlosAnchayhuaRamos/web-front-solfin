@@ -20,6 +20,10 @@ export const SolicitudesView: React.FC = () => {
     }));
   };
 
+  const handleApprove = async (requestId: string) => {
+    await reviewRequest(requestId, 'approve');
+  };
+
   if (isLoading) {
     return (
       <>
@@ -180,7 +184,7 @@ export const SolicitudesView: React.FC = () => {
                           <Button
                             className="button--compact"
                             disabled={!isPending || isReviewing}
-                            onClick={() => void reviewRequest(request.id, 'approve')}
+                            onClick={() => void handleApprove(request.id)}
                           >
                             Aprobar
                           </Button>

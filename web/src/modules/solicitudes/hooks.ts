@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { apiBaseUrl, apiFetch } from '../../common/api/client';
 import { getApiErrorMessage } from './lib';
-import type { ApprovalRequest } from './types';
+import type { ApprovalRequest, ReviewApprovalResult } from './types';
 
 export const useApprovalRequests = () => {
   const [requests, setRequests] = useState<ApprovalRequest[] | null>(null);
@@ -43,14 +43,15 @@ export const useApprovalRequests = () => {
 
         if (!response.ok) {
           setError(await getApiErrorMessage(response));
-          return false;
+          return null;
         }
 
+        const result = (await response.json()) as ReviewApprovalResult;
         await fetchRequests();
-        return true;
+        return result.contract;
       } catch {
         setError('No se pudo conectar con el backend');
-        return false;
+        return null;
       } finally {
         setReviewingId(null);
       }

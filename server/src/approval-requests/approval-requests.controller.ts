@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
-import { Roles } from '../auth/auth.decorators';
+import { CurrentUser, Roles } from '../auth/auth.decorators';
+import type { AuthTokenPayload } from '../auth/auth.types';
 import { ApprovalRequestsService } from './approval-requests.service';
 import type { ReviewApprovalInput } from './approval-requests.types';
 
@@ -15,12 +16,12 @@ export class ApprovalRequestsController {
   }
 
   @Post(':id/approve')
-  approve(@Param('id') id: string, @Body() input: ReviewApprovalInput) {
-    return this.approvalRequestsService.approve(id, input);
+  approve(@Param('id') id: string, @Body() input: ReviewApprovalInput, @CurrentUser() user: AuthTokenPayload) {
+    return this.approvalRequestsService.approve(id, input, user.sub);
   }
 
   @Post(':id/reject')
-  reject(@Param('id') id: string, @Body() input: ReviewApprovalInput) {
-    return this.approvalRequestsService.reject(id, input);
+  reject(@Param('id') id: string, @Body() input: ReviewApprovalInput, @CurrentUser() user: AuthTokenPayload) {
+    return this.approvalRequestsService.reject(id, input, user.sub);
   }
 }

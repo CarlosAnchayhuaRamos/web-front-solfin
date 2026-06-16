@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { apiBaseUrl, apiFetch } from '../../common/api/client';
-import type { Client, ClientCredit, CreateClientInput, CreditDisbursement, OpenCashSession, PaymentVoucher, UpdateClientInput } from './types';
+import type { Client, ClientCredit, CreateClientInput, CreditAdvisor, CreditDisbursement, OpenCashSession, PaymentVoucher, UpdateClientInput } from './types';
 import { getApiErrorMessage } from './lib';
 
 export const useClients = () => {
@@ -122,11 +122,13 @@ export const useClients = () => {
   };
 };
 
-export const useClientCredits = () => {
+export const useClientCredits = (canAssignAdvisor: boolean, canUseCashSessions: boolean) => {
+  const [advisors, setAdvisors] = useState<CreditAdvisor[] | null>(null);
   const [credits, setCredits] = useState<ClientCredit[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isDisbursing, setIsDisbursing] = useState(false);
+  const [isAssigningAdvisor, setIsAssigningAdvisor] = useState(false);
   const [isPaying, setIsPaying] = useState(false);
   const [openCashSessions, setOpenCashSessions] = useState<OpenCashSession[] | null>(null);
   const [disbursement, setDisbursement] = useState<CreditDisbursement | null>(null);
@@ -137,9 +139,10 @@ export const useClientCredits = () => {
     setIsLoading(true);
 
     try {
-      const [response, sessionsResponse] = await Promise.all([
+      const [response, sessionsResponse, advisorsResponse] = await Promise.all([
         apiFetch(`${apiBaseUrl}/credits/client/${clientId}/approved`, { cache: 'no-store' }),
-        apiFetch(`${apiBaseUrl}/cash/sessions`, { cache: 'no-store' }),
+        canUseCashSessions ? apiFetch(`${apiBaseUrl}/cash/sessions`, { cache: 'no-store' }) : Promise.resolve(null),
+        canAssignAdvisor ? apiFetch(`${apiBaseUrl}/credits/advisors`, { cache: 'no-store' }) : Promise.resolve(null),
       ]);
 
       if (!response.ok) {
@@ -147,14 +150,20 @@ export const useClientCredits = () => {
         return false;
       }
 
-      if (!sessionsResponse.ok) {
+      if (sessionsResponse && !sessionsResponse.ok) {
         setError(await getApiErrorMessage(sessionsResponse));
         return false;
       }
 
+      if (advisorsResponse && !advisorsResponse.ok) {
+        setError(await getApiErrorMessage(advisorsResponse));
+        return false;
+      }
+
       setCredits((await response.json()) as ClientCredit[]);
-      const sessions = (await sessionsResponse.json()) as OpenCashSession[];
+      const sessions = sessionsResponse ? ((await sessionsResponse.json()) as OpenCashSession[]) : [];
       setOpenCashSessions(sessions.filter((session) => session.status === 'OPEN'));
+      setAdvisors(advisorsResponse ? ((await advisorsResponse.json()) as CreditAdvisor[]) : null);
       setDisbursement(null);
       setVoucher(null);
       return true;
@@ -163,6 +172,39 @@ export const useClientCredits = () => {
       return false;
     } finally {
       setIsLoading(false);
+    }
+  }, [canAssignAdvisor, canUseCashSessions]);
+
+  const assignAdvisor = useCallback(async (creditId: string, advisorId: string) => {
+    setError(null);
+    setIsAssigningAdvisor(true);
+
+    try {
+      const response = await apiFetch(`${apiBaseUrl}/credits/${creditId}/advisor`, {
+        body: JSON.stringify({ advisorId }),
+        headers: { 'Content-Type': 'application/json' },
+        method: 'PATCH',
+      });
+
+      if (!response.ok) {
+        setError(await getApiErrorMessage(response));
+        return false;
+      }
+
+      const assignedAdvisor = (await response.json()) as Pick<ClientCredit, 'advisorId' | 'advisorName'>;
+      setCredits((currentCredits) => {
+        if (!currentCredits) return currentCredits;
+        return currentCredits.map((credit) => {
+          if (credit.id !== creditId) return credit;
+          return { ...credit, ...assignedAdvisor };
+        });
+      });
+      return true;
+    } catch {
+      setError('No se pudo conectar con el backend');
+      return false;
+    } finally {
+      setIsAssigningAdvisor(false);
     }
   }, []);
 
@@ -186,7 +228,7 @@ export const useClientCredits = () => {
         const data = (await response.json()) as { credits: ClientCredit[]; voucher: PaymentVoucher };
         setCredits(data.credits);
         setVoucher(data.voucher);
-        return true;
+        return data.voucher;
       } catch {
         setError('No se pudo conectar con el backend');
         return false;
@@ -232,12 +274,15 @@ export const useClientCredits = () => {
   }, []);
 
   return {
+    advisors,
+    assignAdvisor,
     credits,
     disbursement,
     disburseCredit,
     error,
     fetchCredits,
     isDisbursing,
+    isAssigningAdvisor,
     isLoading,
     isPaying,
     openCashSessions,

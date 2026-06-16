@@ -52,17 +52,27 @@ export const escapePrintHtml = (value: string) => {
 };
 
 export const printDocument = (printWindow: Window) => {
-  const logo = printWindow.document.querySelector<HTMLImageElement>('.print-brand__logo');
+  const logos = Array.from(printWindow.document.querySelectorAll<HTMLImageElement>('.print-brand__logo'));
   const print = () => {
     printWindow.focus();
     printWindow.print();
   };
+  const pendingLogos = logos.filter((logo) => !logo.complete);
 
-  if (!logo || logo.complete) {
+  if (!pendingLogos.length) {
     window.setTimeout(print, 100);
     return;
   }
 
-  logo.addEventListener('load', print, { once: true });
-  logo.addEventListener('error', print, { once: true });
+  let completedLogos = 0;
+  const handleLogoComplete = () => {
+    completedLogos += 1;
+    if (completedLogos < pendingLogos.length) return;
+    print();
+  };
+
+  pendingLogos.forEach((logo) => {
+    logo.addEventListener('load', handleLogoComplete, { once: true });
+    logo.addEventListener('error', handleLogoComplete, { once: true });
+  });
 };

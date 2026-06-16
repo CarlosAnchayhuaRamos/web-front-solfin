@@ -161,6 +161,7 @@ model AppUser {
 
   organization       Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   creditsAsAnalyst   Credit[]              @relation("AnalystCredits")
+  approvedCredits    Credit[]              @relation("ApprovedCredits")
   cashSessions       CashSession[]
   cashMovements      CashMovement[]
   uploadedDocuments  Document[]            @relation("UploadedDocuments")
@@ -236,6 +237,7 @@ model Credit {
   clientId          String       @db.Uuid
   productId         String       @db.Uuid
   analystId         String
+  approvedById      String?
   code              String
   type              CreditType
   status            CreditStatus @default(DRAFT)
@@ -255,6 +257,7 @@ model Credit {
   client          Client                @relation(fields: [clientId], references: [id], onDelete: Restrict)
   product         CreditProduct         @relation(fields: [productId], references: [id], onDelete: Restrict)
   analyst         AppUser               @relation("AnalystCredits", fields: [analystId], references: [id], onDelete: Restrict)
+  approvedBy      AppUser?              @relation("ApprovedCredits", fields: [approvedById], references: [id], onDelete: Restrict)
   approvalRequest ApprovalRequest?
   collateral      Collateral?
   schedules       PaymentSchedule[]
@@ -267,6 +270,7 @@ model Credit {
   @@index([organizationId, status])
   @@index([clientId, status])
   @@index([analystId, createdAt])
+  @@index([approvedById, createdAt])
   @@map("credits")
 }
 
@@ -434,7 +438,7 @@ model CashBox {
   id             String   @id @default(uuid()) @db.Uuid
   organizationId String   @db.Uuid
   name           String
-  assignedUserId String?       @unique
+  assignedUserId String?  @unique
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt

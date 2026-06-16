@@ -1,11 +1,3 @@
-export interface ReportItem {
-  id: string;
-  name: string;
-  description: string;
-  format: 'PDF' | 'XLSX' | 'CSV';
-  status: 'READY' | 'QUEUED';
-}
-
 export interface PortfolioReportClient {
   clientDni: string;
   clientName: string;

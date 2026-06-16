@@ -50,10 +50,28 @@ export interface RegisteredCreditSchedule {
 export interface RegisteredCredit {
   client: RegisteredCreditClient;
   code: string;
+  contract: RegisteredCreditContract | null;
   installmentAmount: number;
   interestRate: number;
   principalAmount: number;
   schedules: RegisteredCreditSchedule[];
   status: string;
+  totalAmount: number;
+}
+
+export interface RegisteredCreditContract {
+  advisorName: string;
+  approvedAt: string;
+  approvedByName: string;
+  clientAddress: string | null;
+  clientDni: string;
+  clientName: string;
+  creditCode: string;
+  installmentAmount: number;
+  installmentCount: number;
+  interestRate: number;
+  penaltyRate: number;
+  principalAmount: number;
+  schedules: RegisteredCreditSchedule[];
   totalAmount: number;
 }

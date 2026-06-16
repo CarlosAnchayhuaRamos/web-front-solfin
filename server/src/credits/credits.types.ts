@@ -12,6 +12,10 @@ export interface CreateCreditInput extends CreditSimulationInput {
   notes?: string;
 }
 
+export interface AssignCreditAdvisorInput {
+  advisorId: string;
+}
+
 export interface PaymentScheduleItem {
   installmentNo: number;
   dueDate: string;
@@ -39,6 +43,8 @@ export interface DisburseCreditInput {
 
 export interface PaymentVoucher {
   amount: number;
+  cashierName: string;
+  clientDni: string;
   clientName: string;
   creditCode: string;
   paidAt: string;

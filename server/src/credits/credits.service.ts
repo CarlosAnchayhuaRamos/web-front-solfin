@@ -1,29 +1,12 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { CreditStatus, CreditType, DocumentType, PaymentMethod, PaymentStatus, StorageProvider, UserRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import type { CreateCreditInput, CreditSimulationInput, CreditSimulationResult, DisburseCreditInput, PayInstallmentsInput } from './credits.types';
+import type { AssignCreditAdvisorInput, CreateCreditInput, CreditSimulationInput, CreditSimulationResult, DisburseCreditInput, PayInstallmentsInput } from './credits.types';
 
 const demoOrganization = {
   clerkOrganizationId: 'org_demo_solfin',
   name: 'SOLFIN PERU',
   ruc: '20600000001',
-};
-
-const demoAnalyst = {
-  creditLimit: 3500,
-  dni: '70000001',
-  fullName: 'Rosa Huaman',
-  id: 'user_demo_analyst',
-  email: 'analista@solfin.pe',
-  phone: '900000001',
-  position: 'Analista',
-};
-
-const demoRequester = {
-  email: 'analista@solfin.pe',
-  fullName: 'Rosa Huaman',
-  id: 'user_demo_analyst',
-  role: UserRole.ANALYST,
 };
 
 const productSeed = {
@@ -103,12 +86,19 @@ export class CreditsService {
     };
   }
 
-  async create(input: CreateCreditInput) {
+  async create(input: CreateCreditInput, requesterId: string) {
     const simulation = await this.simulate(input);
     const organization = await this.getOrganization();
     const product = await this.getProduct(organization.id, input.productType);
     const policy = await this.getCreditPolicy(organization.id);
-    const analyst = await this.getAnalyst(organization.id);
+    const requester = await this.prisma.appUser.findFirst({
+      where: {
+        id: requesterId,
+        isActive: true,
+        organizationId: organization.id,
+        role: { in: [UserRole.ADMIN, UserRole.ANALYST] },
+      },
+    });
     const client = await this.prisma.client.findFirst({
       where: {
         id: input.clientId,
@@ -120,19 +110,23 @@ export class CreditsService {
       throw new NotFoundException('Cliente no encontrado');
     }
 
+    if (!requester) {
+      throw new NotFoundException('Usuario solicitante no encontrado');
+    }
+
     const code = await this.nextCreditCode(organization.id);
-    const requester = await this.getRequester(organization.id);
     const fileNames = this.getRequestFileNames(input.fileNames);
 
     if (fileNames.length > (policy.maxRequestFiles ?? 5)) {
       throw new BadRequestException(`Maximo ${policy.maxRequestFiles ?? 5} archivos permitidos`);
     }
 
-    const requiresAdminApproval = input.amount > Number(analyst.creditLimit);
+    const requiresAdminApproval = requester.role !== UserRole.ADMIN && input.amount > Number(requester.creditLimit);
 
-    return this.prisma.credit.create({
+    const credit = await this.prisma.credit.create({
       data: {
-        analystId: analyst.id,
+        analystId: requester.id,
+        approvedById: requiresAdminApproval ? undefined : requester.id,
         clientId: client.id,
         code,
         firstDueDate: new Date(`${simulation.installments[0].dueDate}T00:00:00.000Z`),
@@ -166,7 +160,7 @@ export class CreditsService {
         approvalRequest: requiresAdminApproval
           ? {
               create: {
-                analystLimit: analyst.creditLimit,
+                analystLimit: requester.creditLimit,
                 organizationId: organization.id,
                 reason: input.notes?.trim() || 'Credito registrado para revision',
                 requestedAmount: input.amount,
@@ -185,19 +179,45 @@ export class CreditsService {
         schedules: { orderBy: { installmentNo: 'asc' } },
       },
     });
+
+    if (requiresAdminApproval) return { ...credit, contract: null };
+
+    return {
+      ...credit,
+      contract: {
+        advisorName: requester.fullName,
+        approvedAt: new Date().toISOString(),
+        approvedByName: requester.fullName,
+        clientAddress: [client.personalAddress, client.district, client.province, client.department].filter(Boolean).join(', ') || null,
+        clientDni: client.dni,
+        clientName: `${client.firstName} ${client.lastName}`,
+        creditCode: credit.code,
+        installmentAmount: Number(credit.installmentAmount),
+        installmentCount: credit.installmentCount,
+        interestRate: Number(credit.interestRate),
+        penaltyRate: Number(policy.defaultPenaltyRate),
+        principalAmount: Number(credit.principalAmount),
+        schedules: credit.schedules.map((schedule) => ({
+          dueDate: schedule.dueDate.toISOString(),
+          installmentNo: schedule.installmentNo,
+          interest: Number(schedule.interest),
+          principal: Number(schedule.principal),
+          totalDue: Number(schedule.totalDue),
+        })),
+        totalAmount: Number(credit.totalAmount),
+      },
+    };
   }
 
   async findApprovedByClient(clientId: string) {
     const organization = await this.getOrganization();
+    const policy = await this.getCreditPolicy(organization.id);
 
     const credits = await this.prisma.credit.findMany({
       include: {
-        cashMovements: {
-          include: { cashSession: { include: { cashBox: true } } },
-          orderBy: { createdAt: 'desc' },
-          take: 1,
-          where: { type: 'CREDIT_DISBURSEMENT' },
-        },
+        analyst: true,
+        approvalRequest: true,
+        approvedBy: true,
         schedules: { orderBy: { installmentNo: 'asc' } },
       },
       orderBy: { createdAt: 'desc' },
@@ -216,13 +236,17 @@ export class CreditsService {
       }, 0);
 
       return {
+        advisorId: credit.analyst.id,
+        advisorName: credit.analyst.fullName,
+        approvedAt: (credit.approvalRequest?.reviewedAt ?? credit.createdAt).toISOString(),
+        approvedByName: credit.approvedBy?.fullName ?? null,
         code: credit.code,
-        disbursementCashBox: credit.cashMovements[0]?.cashSession.cashBox.name ?? null,
         id: credit.id,
         installmentAmount: Number(credit.installmentAmount),
         interestRate: Number(credit.interestRate),
         netValue,
         overdueAmount,
+        penaltyRate: Number(policy.defaultPenaltyRate),
         principalAmount: Number(credit.principalAmount),
         schedules: credit.schedules.map((schedule) => ({
           dueDate: schedule.dueDate.toISOString().slice(0, 10),
@@ -240,6 +264,54 @@ export class CreditsService {
         type: credit.type,
       };
     });
+  }
+
+  async findAdvisors() {
+    const organization = await this.getOrganization();
+    return this.prisma.appUser.findMany({
+      orderBy: { fullName: 'asc' },
+      select: { fullName: true, id: true, role: true },
+      where: {
+        isActive: true,
+        organizationId: organization.id,
+        role: { in: [UserRole.ADMIN, UserRole.ANALYST] },
+      },
+    });
+  }
+
+  async assignAdvisor(creditId: string, input: AssignCreditAdvisorInput) {
+    if (!input.advisorId?.trim()) {
+      throw new BadRequestException('El asesor es obligatorio');
+    }
+
+    const organization = await this.getOrganization();
+    const advisor = await this.prisma.appUser.findFirst({
+      where: {
+        id: input.advisorId,
+        isActive: true,
+        organizationId: organization.id,
+        role: { in: [UserRole.ADMIN, UserRole.ANALYST] },
+      },
+    });
+
+    if (!advisor) {
+      throw new NotFoundException('Asesor no encontrado');
+    }
+
+    const credit = await this.prisma.credit.findFirst({
+      where: { id: creditId, organizationId: organization.id },
+    });
+
+    if (!credit) {
+      throw new NotFoundException('Credito no encontrado');
+    }
+
+    await this.prisma.credit.update({
+      data: { analystId: advisor.id },
+      where: { id: credit.id },
+    });
+
+    return { advisorId: advisor.id, advisorName: advisor.fullName };
   }
 
   async payInstallments(creditId: string, input: PayInstallmentsInput) {
@@ -347,6 +419,8 @@ export class CreditsService {
       credits,
       voucher: {
         amount: paymentAmount,
+        cashierName: cashSession.user.fullName,
+        clientDni: credit.client.dni,
         clientName: `${credit.client.firstName} ${credit.client.lastName}`,
         creditCode: credit.code,
         paidAt: new Date().toISOString(),
@@ -469,6 +543,7 @@ export class CreditsService {
 
   private async findOpenCashSession(organizationId: string, userId: string) {
     const sessions = await this.prisma.cashSession.findMany({
+      include: { user: true },
       orderBy: { openedAt: 'desc' },
       take: 1,
       where: {
@@ -539,50 +614,6 @@ export class CreditsService {
       } as never,
       update: {},
       where: { organizationId },
-    });
-  }
-
-  private async getAnalyst(organizationId: string) {
-    return this.prisma.appUser.upsert({
-      create: {
-        creditLimit: demoAnalyst.creditLimit,
-        dni: demoAnalyst.dni,
-        email: demoAnalyst.email,
-        fullName: demoAnalyst.fullName,
-        id: demoAnalyst.id,
-        organizationId,
-        phone: demoAnalyst.phone,
-        position: demoAnalyst.position,
-        role: UserRole.ANALYST,
-      },
-      update: {
-        creditLimit: demoAnalyst.creditLimit,
-        dni: demoAnalyst.dni,
-        email: demoAnalyst.email,
-        fullName: demoAnalyst.fullName,
-        phone: demoAnalyst.phone,
-        position: demoAnalyst.position,
-        role: UserRole.ANALYST,
-      },
-      where: { id: demoAnalyst.id },
-    });
-  }
-
-  private async getRequester(organizationId: string) {
-    return this.prisma.appUser.upsert({
-      create: {
-        email: demoRequester.email,
-        fullName: demoRequester.fullName,
-        id: demoRequester.id,
-        organizationId,
-        role: demoRequester.role,
-      },
-      update: {
-        email: demoRequester.email,
-        fullName: demoRequester.fullName,
-        role: demoRequester.role,
-      },
-      where: { id: demoRequester.id },
     });
   }
 

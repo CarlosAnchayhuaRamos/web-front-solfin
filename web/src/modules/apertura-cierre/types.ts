@@ -51,8 +51,17 @@ export interface CashCloseReport {
   difference: number;
   expectedAmount: number;
   expenses: number;
+  expenseMovements: CashCloseMovement[];
   income: number;
+  incomeMovements: CashCloseMovement[];
   openingAmount: number;
+}
+
+export interface CashCloseMovement {
+  amount: number;
+  client: string;
+  code: string;
+  createdAt: string;
 }
 
 export interface VaultCloseReport {

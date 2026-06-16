@@ -8,24 +8,44 @@ import { PageHeader } from '../../common/layout/PageHeader';
 import { clientStatusOptions, initialClientFilters, initialClientForm } from './data';
 import { useClientCredits, useClients } from './hooks';
 import { filterClients, getClientRiskColor, getClientRiskLabel, toClientFormState } from './lib';
-import type { Client, ClientFilters, ClientFormState, PaymentVoucher } from './types';
+import { printApprovedPaymentSchedule, printCreditContract, printDisbursementRequest } from '../solicitudes/lib';
+import type { CreditContractData } from '../solicitudes/types';
+import type { Client, ClientCredit, ClientFilters, ClientFormState, PaymentVoucher } from './types';
+
+const emptyPaymentVoucher: PaymentVoucher = {
+  amount: 0,
+  cashierName: '',
+  clientDni: '',
+  clientName: '',
+  creditCode: '',
+  paidAt: '',
+  remainingBalance: 0,
+  scheduleNumbers: [],
+  voucherCode: '',
+};
 
 export const ClientesView: React.FC = () => {
   const { user } = useAuth();
+  const canAssignCreditAdvisor = hasRole(user, ['ADMIN']);
+  const canUseCashSessions = hasRole(user, ['ADMIN', 'CASHIER']);
   const { clients, createClient, error, isCreating, isLoading, isUpdating, refetch, updateClient } = useClients();
   const {
+    advisors,
+    assignAdvisor,
     credits,
     disbursement,
     disburseCredit,
     error: creditsError,
     fetchCredits,
     isDisbursing,
+    isAssigningAdvisor,
     isLoading: isLoadingCredits,
     isPaying,
     openCashSessions,
     payInstallments,
-    voucher,
-  } = useClientCredits();
+    voucher: paidVoucherPreview,
+  } = useClientCredits(canAssignCreditAdvisor, canUseCashSessions);
+  const voucher = paidVoucherPreview ?? emptyPaymentVoucher;
   const [form, setForm] = useState<ClientFormState>(initialClientForm);
   const [filters, setFilters] = useState<ClientFilters>(initialClientFilters);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -50,8 +70,9 @@ export const ClientesView: React.FC = () => {
   const selectedCredit = credits?.find((credit) => credit.id === selectedCreditId) ?? null;
   const parsedPaymentAmount = Number(paymentAmount);
   const isPaymentAmountValid = Number.isFinite(parsedPaymentAmount) && parsedPaymentAmount > 0;
-  const canPayInstallments = hasRole(user, ['ADMIN', 'CASHIER']);
-  const canDisburseCredits = hasRole(user, ['ADMIN', 'CASHIER']);
+  const canPayInstallments = canUseCashSessions;
+  const canDisburseCredits = canUseCashSessions;
+  const canPrintClientCreditDocuments = canUseCashSessions;
   const ownOpenCashSession = user ? openCashSessions?.find((session) => session.userId === user.id) ?? null : null;
   const isSelectedCreditDisbursed = selectedCredit?.status === 'ACTIVE' || selectedCredit?.status === 'OVERDUE';
 
@@ -100,11 +121,12 @@ export const ClientesView: React.FC = () => {
     if (!isPaymentAmountValid) return;
     if (!isSelectedCreditDisbursed) return;
 
-    const paid = await payInstallments(selectedCredit.id, parsedPaymentAmount, user.id);
+    const paidVoucher = await payInstallments(selectedCredit.id, parsedPaymentAmount, user.id);
 
-    if (!paid) return;
+    if (!paidVoucher) return;
     setSelectedScheduleId(null);
     setPaymentAmount('');
+    printVoucher(paidVoucher);
   };
 
   const handleDisburseCredit = async (creditId: string) => {
@@ -112,6 +134,17 @@ export const ClientesView: React.FC = () => {
     if (!user) return;
 
     await disburseCredit(creditId, user.id);
+  };
+
+  const handlePrintApprovedDocument = (printDocumentHandler: (printWindow: Window, contract: CreditContractData) => void) => {
+    if (!selectedClient) return;
+    if (!selectedCredit) return;
+    if (selectedCredit.status !== 'APPROVED') return;
+
+    const printWindow = window.open('', '_blank', 'width=960,height=760');
+
+    if (!printWindow) return;
+    printDocumentHandler(printWindow, toCreditContractData(selectedClient, selectedCredit));
   };
 
   const getSubmitLabel = () => {
@@ -360,7 +393,7 @@ export const ClientesView: React.FC = () => {
                         <th>Mora</th>
                         <th>Valor neto</th>
                         <th>Estado</th>
-                        <th>Caja desembolso</th>
+                        <th>Asesor</th>
                         <th>Accion</th>
                       </tr>
                     </thead>
@@ -381,9 +414,26 @@ export const ClientesView: React.FC = () => {
                           <td className="money">{formatMoney(credit.overdueAmount)}</td>
                           <td className="money">{formatMoney(credit.netValue)}</td>
                           <td>{credit.status}</td>
-                          <td>{credit.disbursementCashBox ?? ''}</td>
                           <td onClick={(event) => event.stopPropagation()}>
-                            {credit.status === 'APPROVED' ? (
+                            {canAssignCreditAdvisor && advisors?.length ? (
+                              <select
+                                aria-label={`Asesor de ${credit.code}`}
+                                disabled={isAssigningAdvisor}
+                                onChange={(event) => void assignAdvisor(credit.id, event.target.value)}
+                                value={credit.advisorId}
+                              >
+                                {advisors.map((advisor) => (
+                                  <option key={advisor.id} value={advisor.id}>
+                                    {advisor.fullName}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              credit.advisorName
+                            )}
+                          </td>
+                          <td onClick={(event) => event.stopPropagation()}>
+                            {credit.status === 'APPROVED' && canDisburseCredits ? (
                               <Button
                                 className="button--compact"
                                 disabled={!canDisburseCredits || !ownOpenCashSession || isDisbursing}
@@ -411,7 +461,20 @@ export const ClientesView: React.FC = () => {
               </div>
             </div>
             <div className="card__body">
-              {voucher ? (
+              {selectedCredit?.status === 'APPROVED' && canPrintClientCreditDocuments ? (
+                <div className="actions">
+                  <Button className="button--compact button--document" onClick={() => handlePrintApprovedDocument(printApprovedPaymentSchedule)} variant="outline">
+                    Cronograma
+                  </Button>
+                  <Button className="button--compact button--document" onClick={() => handlePrintApprovedDocument(printCreditContract)} variant="outline">
+                    Contrato
+                  </Button>
+                  <Button className="button--compact button--document" onClick={() => handlePrintApprovedDocument(printDisbursementRequest)} variant="outline">
+                    Solicitud de desembolso
+                  </Button>
+                </div>
+              ) : null}
+              {voucher && false ? (
                 <div className="voucher">
                   <div>
                     <strong>{voucher.voucherCode}</strong>
@@ -424,8 +487,7 @@ export const ClientesView: React.FC = () => {
                   </Button>
                 </div>
               ) : null}
-              {!canPayInstallments ? <p className="message--error">No autorizado para pagar cuotas.</p> : null}
-              {selectedCredit && !isSelectedCreditDisbursed ? <p className="message--error">Credito debe estar desembolsado para registrar pagos.</p> : null}
+              {selectedCredit && canPayInstallments && !isSelectedCreditDisbursed ? <p className="message--error">Credito debe estar desembolsado para registrar pagos.</p> : null}
               {selectedCredit && canPayInstallments && !ownOpenCashSession ? <p className="message--error">Perfil debe tener una caja abierta para registrar pagos.</p> : null}
               {selectedCredit && canPayInstallments && isSelectedCreditDisbursed && ownOpenCashSession ? (
                 <div className="inline-form">
@@ -505,38 +567,83 @@ export const ClientesView: React.FC = () => {
   );
 };
 
+const toCreditContractData = (client: Client, credit: ClientCredit): CreditContractData => ({
+  advisorName: credit.advisorName,
+  approvedAt: credit.approvedAt,
+  approvedByName: credit.approvedByName ?? credit.advisorName,
+  clientAddress: client.personalAddress,
+  clientDni: client.dni,
+  clientName: client.fullName,
+  creditCode: credit.code,
+  installmentAmount: credit.installmentAmount,
+  installmentCount: credit.schedules.length,
+  interestRate: credit.interestRate,
+  penaltyRate: credit.penaltyRate,
+  principalAmount: credit.principalAmount,
+  schedules: credit.schedules.map((schedule) => ({
+    dueDate: schedule.dueDate,
+    installmentNo: schedule.installmentNo,
+    interest: schedule.interest,
+    principal: schedule.principal,
+    totalDue: schedule.totalDue,
+  })),
+  totalAmount: credit.totalAmount,
+});
+
 const printVoucher = (voucher: PaymentVoucher) => {
-  const printWindow = window.open('', '_blank', 'width=420,height=620');
+  const printWindow = window.open('', '_blank', 'width=960,height=680');
 
   if (!printWindow) return;
 
+  const cashierName = escapePrintHtml(voucher.cashierName);
+  const clientDni = escapePrintHtml(voucher.clientDni);
   const clientName = escapePrintHtml(voucher.clientName);
   const creditCode = escapePrintHtml(voucher.creditCode);
   const voucherCode = escapePrintHtml(voucher.voucherCode);
+  const paidAt = new Date(voucher.paidAt).toLocaleString('es-PE');
+  const voucherCopy = (includeSignature: boolean) => `
+    <section class="voucher-copy">
+      ${getPrintBrandMarkup(window.location.origin)}
+      <h1>Voucher de pago</h1>
+      <p><span>Fecha</span><strong>${paidAt}</strong></p>
+      <p><span>Cliente</span><strong>${clientName}</strong></p>
+      <p><span>Cuotas</span><strong>${voucher.scheduleNumbers.join(', ')}</strong></p>
+      <p><span>Codigo</span><strong>${voucherCode}</strong></p>
+      <p><span>Credito</span><strong>${creditCode}</strong></p>
+      <p class="amount"><span>Total</span><strong>${formatMoney(voucher.amount)}</strong></p>
+      <p><span>Saldo pendiente</span><strong>${formatMoney(voucher.remainingBalance)}</strong></p>
+      ${includeSignature ? '<div class="signature"><span>Firma</span></div>' : ''}
+      <p><span>DNI</span><strong>${clientDni}</strong></p>
+      <footer><span>Usuario</span><strong>${cashierName}</strong></footer>
+    </section>
+  `;
 
   printWindow.document.write(`
     <html>
       <head>
         <title>${voucherCode}</title>
         <style>
-          body { font-family: Arial, sans-serif; padding: 24px; color: #111; }
-          h1 { font-size: 20px; margin: 20px 0 16px; }
-          p { margin: 8px 0; }
+          body { font-family: Arial, sans-serif; margin: 0; padding: 20px; color: #111; }
+          .voucher-sheet { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+          .voucher-copy { display: flex; min-height: 560px; flex-direction: column; padding: 0 22px; }
+          .voucher-copy + .voucher-copy { border-left: 1px dashed #777; }
+          h1 { font-size: 19px; margin: 16px 0 14px; text-align: center; }
+          p { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 8px; margin: 5px 0; font-size: 13px; }
+          p span, footer span { color: #4b5563; }
+          p strong { overflow-wrap: anywhere; }
           ${getPrintBrandStyles()}
-          .amount { font-size: 24px; font-weight: 700; margin-top: 18px; }
-          @media print { body { padding: 0; } }
+          .amount { border-top: 1px solid #aaa; margin-top: 12px; padding-top: 10px; font-size: 17px; }
+          .signature { height: 82px; margin-top: 18px; border-bottom: 1px solid #111; display: flex; align-items: end; justify-content: center; }
+          .signature span { position: relative; top: 20px; font-size: 11px; }
+          footer { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 8px; margin-top: auto; border-top: 1px solid #aaa; padding-top: 8px; font-size: 11px; }
+          @media print { body { padding: 0; } .voucher-copy { min-height: 95vh; } }
         </style>
       </head>
       <body>
-        ${getPrintBrandMarkup(window.location.origin)}
-        <h1>Voucher de pago</h1>
-        <p><strong>Codigo:</strong> ${voucherCode}</p>
-        <p><strong>Cliente:</strong> ${clientName}</p>
-        <p><strong>Credito:</strong> ${creditCode}</p>
-        <p><strong>Cuotas:</strong> ${voucher.scheduleNumbers.join(', ')}</p>
-        <p><strong>Fecha:</strong> ${new Date(voucher.paidAt).toLocaleString('es-PE')}</p>
-        <p class="amount">Total: ${formatMoney(voucher.amount)}</p>
-        <p><strong>Saldo pendiente:</strong> ${formatMoney(voucher.remainingBalance)}</p>
+        <main class="voucher-sheet">
+          ${voucherCopy(true)}
+          ${voucherCopy(false)}
+        </main>
       </body>
     </html>
   `);

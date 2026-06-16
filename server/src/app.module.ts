@@ -9,12 +9,14 @@ import { AuthGuard } from './auth/auth.guard';
 import { CashModule } from './cash/cash.module';
 import { ClientsModule } from './clients/clients.module';
 import { CreditsModule } from './credits/credits.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 import { ParametersModule } from './parameters/parameters.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { ReportsModule } from './reports/reports.module';
 import { UsersModule } from './users/users.module';
 
 @Module({
-  imports: [ConfigModule.forRoot({ isGlobal: true }), PrismaModule, AuthModule, CashModule, ClientsModule, CreditsModule, ApprovalRequestsModule, ParametersModule, UsersModule],
+  imports: [ConfigModule.forRoot({ isGlobal: true }), PrismaModule, AuthModule, CashModule, ClientsModule, CreditsModule, DashboardModule, ApprovalRequestsModule, ParametersModule, ReportsModule, UsersModule],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: AuthGuard }],
 })

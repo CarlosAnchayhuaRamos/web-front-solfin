@@ -50,18 +50,28 @@ export interface ClientCreditSchedule {
 }
 
 export interface ClientCredit {
+  advisorId: string;
+  advisorName: string;
+  approvedAt: string;
+  approvedByName: string | null;
   code: string;
-  disbursementCashBox: string | null;
   id: string;
   installmentAmount: number;
   interestRate: number;
   netValue: number;
   overdueAmount: number;
+  penaltyRate: number;
   principalAmount: number;
   schedules: ClientCreditSchedule[];
   status: string;
   totalAmount: number;
   type: string;
+}
+
+export interface CreditAdvisor {
+  fullName: string;
+  id: string;
+  role: 'ADMIN' | 'ANALYST';
 }
 
 export interface OpenCashSession {
@@ -82,6 +92,8 @@ export interface CreditDisbursement {
 
 export interface PaymentVoucher {
   amount: number;
+  cashierName: string;
+  clientDni: string;
   clientName: string;
   creditCode: string;
   paidAt: string;

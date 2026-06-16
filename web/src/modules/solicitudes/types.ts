@@ -33,3 +33,33 @@ export interface ApprovalRequestFilters {
   dateTo: string;
   status: 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELED';
 }
+
+export interface CreditContractData {
+  advisorName: string;
+  approvedAt: string;
+  approvedByName: string;
+  clientAddress: string | null;
+  clientDni: string;
+  clientName: string;
+  creditCode: string;
+  installmentAmount: number;
+  installmentCount: number;
+  interestRate: number;
+  penaltyRate: number;
+  principalAmount: number;
+  schedules: CreditContractSchedule[];
+  totalAmount: number;
+}
+
+export interface CreditContractSchedule {
+  dueDate: string;
+  installmentNo: number;
+  interest: number;
+  principal: number;
+  totalDue: number;
+}
+
+export interface ReviewApprovalResult {
+  contract: CreditContractData | null;
+  request: ApprovalRequest;
+}

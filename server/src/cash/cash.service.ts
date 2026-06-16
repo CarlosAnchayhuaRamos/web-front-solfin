@@ -434,6 +434,7 @@ export class CashService {
     }
 
     const movements = await this.getCashMovementTotals(id);
+    const movementDetails = await this.getCashMovementDetails(id);
 
     return {
       report: {
@@ -444,7 +445,9 @@ export class CashService {
         difference: Number(session.difference),
         expectedAmount: Number(session.expectedAmount),
         expenses: movements.expenses,
+        expenseMovements: movementDetails.filter((movement) => movement.direction === 'OUT').map(this.toCashCloseMovementDto),
         income: movements.income,
+        incomeMovements: movementDetails.filter((movement) => movement.direction === 'IN').map(this.toCashCloseMovementDto),
         openingAmount: Number(session.openingAmount),
       },
       session: this.toSessionDto(session),
@@ -615,6 +618,7 @@ export class CashService {
       `
         SELECT
           cb.name AS "cashBox",
+          cs.id,
           au."fullName" AS cashier,
           cs."closedAt",
           cs."openingAmount",
@@ -636,17 +640,53 @@ export class CashService {
       organizationId,
     );
 
-    return reports.map((report) => ({
-      cashBox: report.cashBox,
-      cashier: report.cashier,
-      closedAt: report.closedAt.toISOString(),
-      countedAmount: Number(report.countedAmount),
-      difference: Number(report.difference),
-      expectedAmount: Number(report.expectedAmount),
-      expenses: Number(report.expenses),
-      income: Number(report.income),
-      openingAmount: Number(report.openingAmount),
-    }));
+    return Promise.all(
+      reports.map(async (report) => {
+        const movementDetails = await this.getCashMovementDetails(report.id);
+
+        return {
+          cashBox: report.cashBox,
+          cashier: report.cashier,
+          closedAt: report.closedAt.toISOString(),
+          countedAmount: Number(report.countedAmount),
+          difference: Number(report.difference),
+          expectedAmount: Number(report.expectedAmount),
+          expenses: Number(report.expenses),
+          expenseMovements: movementDetails.filter((movement) => movement.direction === 'OUT').map(this.toCashCloseMovementDto),
+          income: Number(report.income),
+          incomeMovements: movementDetails.filter((movement) => movement.direction === 'IN').map(this.toCashCloseMovementDto),
+          openingAmount: Number(report.openingAmount),
+        };
+      }),
+    );
+  }
+
+  private async getCashMovementDetails(sessionId: string) {
+    return this.prisma.$queryRawUnsafe<CashMovementDetailRecord[]>(
+      `
+        SELECT
+          cm.amount,
+          COALESCE(cm.reference, c.code, cm.id::text) AS code,
+          COALESCE(cl."firstName" || ' ' || cl."lastName", cm.description) AS client,
+          cm."createdAt",
+          cm.direction::text AS direction
+        FROM cash_movements cm
+        LEFT JOIN credits c ON c.id = cm."creditId"
+        LEFT JOIN clients cl ON cl.id = c."clientId"
+        WHERE cm."cashSessionId" = $1::uuid
+        ORDER BY cm."createdAt" ASC
+      `,
+      sessionId,
+    );
+  }
+
+  private toCashCloseMovementDto(movement: CashMovementDetailRecord) {
+    return {
+      amount: Number(movement.amount),
+      client: movement.client,
+      code: movement.code,
+      createdAt: movement.createdAt.toISOString(),
+    };
   }
 
   private sumReportField<T>(reports: T[], field: keyof T) {
@@ -890,5 +930,14 @@ interface CashCloseReportRecord {
   expectedAmount: unknown;
   expenses: unknown;
   income: unknown;
+  id: string;
   openingAmount: unknown;
+}
+
+interface CashMovementDetailRecord {
+  amount: unknown;
+  client: string;
+  code: string;
+  createdAt: Date;
+  direction: 'IN' | 'OUT';
 }

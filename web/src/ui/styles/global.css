@@ -349,6 +349,16 @@ a {
   padding: 0 12px;
 }
 
+.button--document {
+  border-color: #d1d5db;
+  background: #eef2f7;
+  color: #374151;
+}
+
+.button--document:hover {
+  background: #e5e7eb;
+}
+
 .grid {
   display: grid;
   gap: 16px;

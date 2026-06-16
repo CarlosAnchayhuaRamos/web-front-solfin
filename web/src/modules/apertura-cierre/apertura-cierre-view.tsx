@@ -10,7 +10,7 @@ import { useCashPolicy } from '../parametros/hooks';
 import { currencyDenominations } from './data';
 import { useCashSessions } from './hooks';
 import { getCashDifference, getDenominationCounts, getDenominationSummary, getDenominationTotal } from './lib';
-import type { CashCloseReport, VaultCloseReport } from './types';
+import type { CashCloseMovement, CashCloseReport, VaultCloseReport } from './types';
 
 const initialQuantities = Object.fromEntries(currencyDenominations.map((denomination) => [denomination.label, '0']));
 
@@ -473,6 +473,8 @@ const printCashCloseReport = (report: CashCloseReport, printWindow: Window | nul
     <p><strong>Cajero:</strong> ${escapePrintHtml(report.cashier)}</p>
     <p><strong>Cierre:</strong> ${new Date(report.closedAt).toLocaleString('es-PE')}</p>
     ${getCashReportSummaryMarkup(report)}
+    ${getCashMovementTableMarkup('Ingresos', report.incomeMovements)}
+    ${getCashMovementTableMarkup('Egresos', report.expenseMovements)}
   `);
 };
 
@@ -521,6 +523,31 @@ const getCashReportSummaryMarkup = (report: CashCloseReport) => `
   </div>
 `;
 
+const getCashMovementTableMarkup = (title: string, movements: CashCloseMovement[]) => {
+  const rows = movements
+    .map(
+      (movement) => `
+        <tr>
+          <td>${escapePrintHtml(movement.code)}</td>
+          <td>${new Date(movement.createdAt).toLocaleTimeString('es-PE')}</td>
+          <td>${escapePrintHtml(movement.client)}</td>
+          <td>${formatMoney(movement.amount)}</td>
+        </tr>
+      `,
+    )
+    .join('');
+  const total = movements.reduce((sum, movement) => sum + movement.amount, 0);
+
+  return `
+    <h2>${escapePrintHtml(title)}</h2>
+    <table>
+      <thead><tr><th>Codigo</th><th>Hora</th><th>Cliente</th><th>Monto</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="4">Sin movimientos</td></tr>'}</tbody>
+      <tfoot><tr><th colspan="3">Total</th><th>${formatMoney(total)}</th></tr></tfoot>
+    </table>
+  `;
+};
+
 const writeCloseReportDocument = (printWindow: Window, title: string, content: string) => {
   printWindow.document.write(`
     <html>
@@ -530,6 +557,7 @@ const writeCloseReportDocument = (printWindow: Window, title: string, content: s
           body { color: #111827; font-family: Arial, sans-serif; padding: 24px; }
           ${getPrintBrandStyles()}
           h1 { font-size: 22px; margin: 20px 0 12px; }
+          h2 { font-size: 16px; margin: 22px 0 0; }
           p { margin: 5px 0; }
           .summary { display: grid; gap: 8px; grid-template-columns: repeat(3, 1fr); margin-top: 18px; }
           .summary div { border: 1px solid #d1d5db; padding: 10px; }
@@ -537,6 +565,8 @@ const writeCloseReportDocument = (printWindow: Window, title: string, content: s
           table { border-collapse: collapse; margin-top: 18px; width: 100%; }
           th, td { border: 1px solid #d1d5db; font-size: 11px; padding: 7px; text-align: right; }
           th:first-child, td:first-child, th:nth-child(2), td:nth-child(2) { text-align: left; }
+          th:nth-child(3), td:nth-child(3) { text-align: left; }
+          tfoot th { border-top: 2px solid #111827; }
           @media print { body { padding: 0; } }
         </style>
       </head>

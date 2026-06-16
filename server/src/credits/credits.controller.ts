@@ -1,8 +1,9 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
-import { Roles } from '../auth/auth.decorators';
+import { CurrentUser, Roles } from '../auth/auth.decorators';
+import type { AuthTokenPayload } from '../auth/auth.types';
 import { CreditsService } from './credits.service';
-import type { CreateCreditInput, CreditSimulationInput, DisburseCreditInput, PayInstallmentsInput } from './credits.types';
+import type { AssignCreditAdvisorInput, CreateCreditInput, CreditSimulationInput, DisburseCreditInput, PayInstallmentsInput } from './credits.types';
 
 @Controller('credits')
 export class CreditsController {
@@ -16,13 +17,25 @@ export class CreditsController {
 
   @Post()
   @Roles(UserRole.ADMIN, UserRole.ANALYST)
-  create(@Body() input: CreateCreditInput) {
-    return this.creditsService.create(input);
+  create(@Body() input: CreateCreditInput, @CurrentUser() user: AuthTokenPayload) {
+    return this.creditsService.create(input, user.sub);
+  }
+
+  @Get('advisors')
+  @Roles(UserRole.ADMIN, UserRole.ANALYST)
+  findAdvisors() {
+    return this.creditsService.findAdvisors();
   }
 
   @Get('client/:clientId/approved')
   findApprovedByClient(@Param('clientId') clientId: string) {
     return this.creditsService.findApprovedByClient(clientId);
+  }
+
+  @Patch(':creditId/advisor')
+  @Roles(UserRole.ADMIN, UserRole.ANALYST)
+  assignAdvisor(@Param('creditId') creditId: string, @Body() input: AssignCreditAdvisorInput) {
+    return this.creditsService.assignAdvisor(creditId, input);
   }
 
   @Post(':creditId/pay-installments')

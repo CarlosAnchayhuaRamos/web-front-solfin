@@ -98,12 +98,12 @@ export const NuevoCreditoView: React.FC = () => {
 
     setForm(initialCreditForm);
     setIsClientComboboxOpen(false);
-    setSuccessMessage('Credito registrado correctamente');
+    setSuccessMessage(
+      registered.status === 'PENDING_APPROVAL'
+        ? 'Credito registrado y enviado a solicitudes. Cronograma pendiente de aprobacion.'
+        : 'Credito registrado y aprobado correctamente',
+    );
 
-    const printed = printPaymentSchedule(registered);
-    if (printed) return;
-
-    setFileError('Credito registrado. El navegador bloqueo la impresion del cronograma.');
   };
 
   return (
@@ -360,6 +360,8 @@ const printPaymentSchedule = (credit: RegisteredCredit) => {
           th:first-child, td:first-child, th:nth-child(2), td:nth-child(2) { text-align: left; }
           .summary { margin-top: 16px; }
           .total { font-size: 18px; font-weight: 700; margin-top: 12px; }
+          .signatures { display: grid; gap: 56px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 72px; page-break-inside: avoid; text-align: center; }
+          .signature { border-top: 1px solid #111827; padding-top: 6px; }
           @media print {
             body { padding: 0; }
             th { background: transparent; }
@@ -390,6 +392,10 @@ const printPaymentSchedule = (credit: RegisteredCredit) => {
           </thead>
           <tbody>${rows}</tbody>
         </table>
+        <section class="signatures">
+          <div class="signature"><strong>CLIENTE</strong><br />${clientName}</div>
+          <div class="signature"><strong>GERENTE DE LA EMPRESA</strong></div>
+        </section>
       </body>
     </html>
   `);

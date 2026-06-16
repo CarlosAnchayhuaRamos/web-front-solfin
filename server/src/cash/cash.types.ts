@@ -71,8 +71,17 @@ export interface CashCloseReportDto {
   difference: number;
   expectedAmount: number;
   expenses: number;
+  expenseMovements: CashCloseMovementDto[];
   income: number;
+  incomeMovements: CashCloseMovementDto[];
   openingAmount: number;
+}
+
+export interface CashCloseMovementDto {
+  amount: number;
+  client: string;
+  code: string;
+  createdAt: string;
 }
 
 export interface CloseCashSessionResultDto {

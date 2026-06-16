@@ -1,10 +1,3 @@
-export interface DashboardMetric {
-  id: string;
-  label: string;
-  value: string;
-  trend: string;
-}
-
 export interface DashboardSummary {
   activeClientCount: number;
   activeCreditCount: number;
@@ -16,11 +9,4 @@ export interface DashboardSummary {
   pendingApprovalCount: number;
   portfolioAmount: number;
   scope: 'GENERAL' | 'ANALYST_PORTFOLIO';
-}
-
-export interface WorkQueueItem {
-  id: string;
-  title: string;
-  description: string;
-  status: 'Urgente' | 'Pendiente' | 'Normal';
 }
