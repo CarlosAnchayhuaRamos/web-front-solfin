@@ -578,6 +578,7 @@ const toCreditContractData = (client: Client, credit: ClientCredit): CreditContr
   installmentAmount: credit.installmentAmount,
   installmentCount: credit.schedules.length,
   interestRate: credit.interestRate,
+  paymentFrequency: credit.paymentFrequency,
   penaltyRate: credit.penaltyRate,
   principalAmount: credit.principalAmount,
   schedules: credit.schedules.map((schedule) => ({

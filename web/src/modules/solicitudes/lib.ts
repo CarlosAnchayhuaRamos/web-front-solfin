@@ -42,6 +42,7 @@ export const printCreditContract = (printWindow: Window, contract: CreditContrac
   const dateText = new Intl.DateTimeFormat('es-PE', { day: 'numeric', month: 'long', year: 'numeric' }).format(approvedDate).toUpperCase();
   const effectiveAnnualInterest = (Math.pow(1 + contract.interestRate, 12) - 1) * 100;
   const effectiveAnnualPenalty = (Math.pow(1 + contract.penaltyRate, 365) - 1) * 100;
+  const paymentFrequencyLabel = getPaymentFrequencyLabel(contract.paymentFrequency);
   const staticClauses = contractClauses.map(([title, body]) => `<h2>${title}</h2><p>${body}</p>`).join('');
 
   printWindow.document.open();
@@ -71,6 +72,7 @@ export const printCreditContract = (printWindow: Window, contract: CreditContrac
           <p><strong>Aprobado por:</strong> ${approvedByName}</p>
           <p><strong>Fecha:</strong> ${dateText}</p>
           <p><strong>Monto:</strong> ${amount}</p>
+          <p><strong>Frecuencia:</strong> ${paymentFrequencyLabel}</p>
           <p><strong>Cuota:</strong> ${formatContractMoney(contract.installmentAmount)}</p>
           <p><strong>Total:</strong> ${formatContractMoney(contract.totalAmount)}</p>
         </div>
@@ -80,7 +82,7 @@ export const printCreditContract = (printWindow: Window, contract: CreditContrac
         <h2>SEGUNDO</h2>
         <p>El préstamo otorgado generará un interés compensatorio a la tasa efectiva anual de <strong>${effectiveAnnualInterest.toFixed(2)}%</strong> y un interés moratorio a la tasa efectiva anual de <strong>${effectiveAnnualPenalty.toFixed(2)}%</strong>; este último será aplicado adicionalmente sobre las cuotas no pagadas a su vencimiento, además de los gastos de cobranza administrativa y/o judicial.</p>
         <h2>TERCERO</h2>
-        <p>EL CLIENTE se compromete a devolver el préstamo otorgado en el plazo máximo de <strong>${contract.installmentCount} meses</strong>, equivalente a <strong>${contract.installmentCount} cuotas</strong>, establecidas en el cronograma de pagos entregado a EL CLIENTE, el cual se anexa al presente.</p>
+        <p>EL CLIENTE se compromete a devolver el préstamo otorgado en <strong>${contract.installmentCount} cuotas</strong> de frecuencia <strong>${paymentFrequencyLabel}</strong>, establecidas en el cronograma de pagos entregado a EL CLIENTE, el cual se anexa al presente.</p>
         ${staticClauses}
         <h2>CLÁUSULA ADICIONAL</h2>
         <p>Interviene en el presente contrato el(la) cónyuge o conviviente de EL CLIENTE, identificado(a) con DNI Nº ___________, con domicilio en _______________________________________, constituyéndose en co-deudor(a) de EL CLIENTE y asumiendo en forma solidaria todas las obligaciones hasta la total cancelación de la deuda, renunciando a su derecho de excusión.</p>
@@ -147,6 +149,7 @@ export const printApprovedPaymentSchedule = (printWindow: Window, contract: Cred
         <p><strong>Cliente:</strong> ${clientName}</p>
         <p><strong>Monto:</strong> ${formatContractMoney(contract.principalAmount)}</p>
         <p><strong>Tasa mensual:</strong> ${(contract.interestRate * 100).toFixed(2)}%</p>
+        <p><strong>Frecuencia:</strong> ${getPaymentFrequencyLabel(contract.paymentFrequency)}</p>
         <p><strong>Cuota:</strong> ${formatContractMoney(contract.installmentAmount)}</p>
         <p class="total">Total: ${formatContractMoney(contract.totalAmount)}</p>
         <table>
@@ -248,3 +251,9 @@ const units = [
 ];
 const tens = ['', '', '', 'TREINTA', 'CUARENTA', 'CINCUENTA', 'SESENTA', 'SETENTA', 'OCHENTA', 'NOVENTA'];
 const hundreds = ['', 'CIENTO', 'DOSCIENTOS', 'TRESCIENTOS', 'CUATROCIENTOS', 'QUINIENTOS', 'SEISCIENTOS', 'SETECIENTOS', 'OCHOCIENTOS', 'NOVECIENTOS'];
+
+const getPaymentFrequencyLabel = (paymentFrequency: CreditContractData['paymentFrequency']) => {
+  if (paymentFrequency === 'DAILY') return 'Diario';
+  if (paymentFrequency === 'WEEKLY') return 'Semanal';
+  return 'Mensual';
+};

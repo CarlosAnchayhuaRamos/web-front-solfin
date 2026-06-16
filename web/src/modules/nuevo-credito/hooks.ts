@@ -45,6 +45,7 @@ export const useCreditRegistration = () => {
       fileNames: form.files.map((file) => file.name),
       installments: Number(form.installments),
       notes: form.notes,
+      paymentFrequency: form.paymentFrequency,
       productType: form.productType,
     };
   };

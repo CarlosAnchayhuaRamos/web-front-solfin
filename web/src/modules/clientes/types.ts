@@ -15,6 +15,7 @@ export interface Client {
 }
 
 export type ClientStatus = 'ACTIVE' | 'WATCHLIST' | 'BLOCKED' | 'INACTIVE';
+export type PaymentFrequency = 'DAILY' | 'WEEKLY' | 'MONTHLY';
 
 export interface CreateClientInput {
   firstName: string;
@@ -60,6 +61,7 @@ export interface ClientCredit {
   interestRate: number;
   netValue: number;
   overdueAmount: number;
+  paymentFrequency: PaymentFrequency;
   penaltyRate: number;
   principalAmount: number;
   schedules: ClientCreditSchedule[];

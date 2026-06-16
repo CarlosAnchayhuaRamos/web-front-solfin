@@ -5,10 +5,10 @@ import { Card, CardBody, CardHeader } from '../../common/components/Card';
 import { formatMoney, formatPercentage } from '../../common/lib/format';
 import { escapePrintHtml, getPrintBrandMarkup, getPrintBrandStyles, printDocument } from '../../common/lib/print';
 import { PageHeader } from '../../common/layout/PageHeader';
-import { creditProductOptions, initialCreditForm } from './data';
+import { creditProductOptions, initialCreditForm, paymentFrequencyOptions } from './data';
 import { useCreditClients, useCreditPolicyParameters, useCreditRegistration } from './hooks';
 import { filterCreditClients, getProductDescription } from './lib';
-import type { CreditFormState, CreditProductType, RegisteredCredit } from './types';
+import type { CreditFormState, CreditProductType, PaymentFrequency, RegisteredCredit } from './types';
 
 export const NuevoCreditoView: React.FC = () => {
   const { clients, error: clientsError, fetchClients, isLoading } = useCreditClients();
@@ -228,6 +228,20 @@ export const NuevoCreditoView: React.FC = () => {
                 />
               </div>
               <div className="field">
+                <label htmlFor="paymentFrequency">Frecuencia de pago</label>
+                <select
+                  id="paymentFrequency"
+                  onChange={(event) => handleChange('paymentFrequency', event.target.value as PaymentFrequency)}
+                  value={form.paymentFrequency}
+                >
+                  {paymentFrequencyOptions.map((frequency) => (
+                    <option key={frequency.id} value={frequency.id}>
+                      {frequency.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
                 <label htmlFor="notes">Observaciones</label>
                 <textarea id="notes" onChange={(event) => handleChange('notes', event.target.value)} value={form.notes} />
               </div>
@@ -265,6 +279,7 @@ export const NuevoCreditoView: React.FC = () => {
                     <span>{formatPercentage(simulation.interestRate)}</span>
                   </div>
                   <Badge color="blue">{simulation.installments.length} cuotas</Badge>
+                  <Badge color="gray">{getPaymentFrequencyLabel(simulation.paymentFrequency)}</Badge>
                 </article>
               </div>
               <div className="table-wrap">
@@ -377,6 +392,7 @@ const printPaymentSchedule = (credit: RegisteredCredit) => {
         <div class="summary">
           <p><strong>Monto:</strong> ${formatMoney(credit.principalAmount)}</p>
           <p><strong>Tasa mensual:</strong> ${formatPercentage(credit.interestRate)}</p>
+          <p><strong>Frecuencia:</strong> ${getPaymentFrequencyLabel(credit.paymentFrequency)}</p>
           <p><strong>Cuota:</strong> ${formatMoney(credit.installmentAmount)}</p>
           <p class="total">Total: ${formatMoney(credit.totalAmount)}</p>
         </div>
@@ -402,4 +418,10 @@ const printPaymentSchedule = (credit: RegisteredCredit) => {
   printWindow.document.close();
   printDocument(printWindow);
   return true;
+};
+
+const getPaymentFrequencyLabel = (paymentFrequency: PaymentFrequency) => {
+  if (paymentFrequency === 'DAILY') return 'Diario';
+  if (paymentFrequency === 'WEEKLY') return 'Semanal';
+  return 'Mensual';
 };

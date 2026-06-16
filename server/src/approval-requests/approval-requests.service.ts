@@ -146,6 +146,7 @@ export class ApprovalRequestsService {
       installmentAmount: Number(credit.installmentAmount),
       installmentCount: credit.installmentCount,
       interestRate: Number(credit.interestRate),
+      paymentFrequency: credit.paymentFrequency,
       penaltyRate: Number(policy?.defaultPenaltyRate ?? 0),
       principalAmount: Number(credit.principalAmount),
       schedules: credit.schedules.map((schedule) => ({

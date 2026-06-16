@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { CreditStatus, CreditType, DocumentType, PaymentMethod, PaymentStatus, StorageProvider, UserRole } from '@prisma/client';
+import { CreditStatus, CreditType, DocumentType, PaymentFrequency, PaymentMethod, PaymentStatus, StorageProvider, UserRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { AssignCreditAdvisorInput, CreateCreditInput, CreditSimulationInput, CreditSimulationResult, DisburseCreditInput, PayInstallmentsInput } from './credits.types';
 
@@ -37,6 +37,7 @@ export class CreditsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async simulate(input: CreditSimulationInput): Promise<CreditSimulationResult> {
+    input.paymentFrequency = input.paymentFrequency ?? PaymentFrequency.MONTHLY;
     this.validateSimulationInput(input);
 
     const organization = await this.getOrganization();
@@ -52,7 +53,9 @@ export class CreditsService {
     }
 
     const monthlyInterestRate = Number(policy.defaultInterestRate);
-    const totalAmount = this.roundMoney(input.amount * Math.exp(monthlyInterestRate * input.installments));
+    const periodFactor = this.getPaymentFrequencyMonthFactor(input.paymentFrequency);
+    const totalMonths = input.installments * periodFactor;
+    const totalAmount = this.roundMoney(input.amount * Math.exp(monthlyInterestRate * totalMonths));
     const totalInterest = totalAmount - input.amount;
     const installmentAmount = this.roundMoney(totalAmount / input.installments);
     const principal = this.roundMoney(input.amount / input.installments);
@@ -60,8 +63,7 @@ export class CreditsService {
 
     const installments = Array.from({ length: input.installments }, (_, index) => {
       const installmentNo = index + 1;
-      const dueDate = new Date();
-      dueDate.setMonth(dueDate.getMonth() + installmentNo);
+      const dueDate = this.getDueDate(input.paymentFrequency, installmentNo);
       const isLastInstallment = installmentNo === input.installments;
       const previousPrincipal = principal * (input.installments - 1);
       const previousInterest = interest * (input.installments - 1);
@@ -82,6 +84,7 @@ export class CreditsService {
       installmentAmount,
       installments,
       interestRate: monthlyInterestRate,
+      paymentFrequency: input.paymentFrequency,
       totalAmount: this.roundMoney(totalAmount),
     };
   }
@@ -134,6 +137,7 @@ export class CreditsService {
         installmentCount: input.installments,
         interestRate: simulation.interestRate,
         organizationId: organization.id,
+        paymentFrequency: input.paymentFrequency,
         principalAmount: input.amount,
         productId: product.id,
         schedules: {
@@ -195,6 +199,7 @@ export class CreditsService {
         installmentAmount: Number(credit.installmentAmount),
         installmentCount: credit.installmentCount,
         interestRate: Number(credit.interestRate),
+        paymentFrequency: credit.paymentFrequency,
         penaltyRate: Number(policy.defaultPenaltyRate),
         principalAmount: Number(credit.principalAmount),
         schedules: credit.schedules.map((schedule) => ({
@@ -246,6 +251,7 @@ export class CreditsService {
         interestRate: Number(credit.interestRate),
         netValue,
         overdueAmount,
+        paymentFrequency: credit.paymentFrequency,
         penaltyRate: Number(policy.defaultPenaltyRate),
         principalAmount: Number(credit.principalAmount),
         schedules: credit.schedules.map((schedule) => ({
@@ -642,10 +648,37 @@ export class CreditsService {
     if (!Number.isInteger(input.installments)) {
       throw new BadRequestException('Las cuotas deben ser un numero entero');
     }
+
+    if (!Object.values(PaymentFrequency).includes(input.paymentFrequency)) {
+      throw new BadRequestException('La frecuencia de pago no es valida');
+    }
   }
 
   private roundMoney(value: number) {
     return Math.round(value * 100) / 100;
+  }
+
+  private getPaymentFrequencyMonthFactor(paymentFrequency: PaymentFrequency) {
+    if (paymentFrequency === PaymentFrequency.DAILY) return 1 / 30;
+    if (paymentFrequency === PaymentFrequency.WEEKLY) return 7 / 30;
+    return 1;
+  }
+
+  private getDueDate(paymentFrequency: PaymentFrequency, installmentNo: number) {
+    const dueDate = new Date();
+
+    if (paymentFrequency === PaymentFrequency.DAILY) {
+      dueDate.setDate(dueDate.getDate() + installmentNo);
+      return dueDate;
+    }
+
+    if (paymentFrequency === PaymentFrequency.WEEKLY) {
+      dueDate.setDate(dueDate.getDate() + installmentNo * 7);
+      return dueDate;
+    }
+
+    dueDate.setMonth(dueDate.getMonth() + installmentNo);
+    return dueDate;
   }
 
   private getRequestFileNames(fileNames: string[] | undefined) {

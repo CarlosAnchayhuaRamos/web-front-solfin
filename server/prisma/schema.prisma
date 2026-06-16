@@ -54,6 +54,12 @@ enum PaymentStatus {
   CANCELED
 }
 
+enum PaymentFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
 enum PaymentMethod {
   CASH
   TRANSFER
@@ -245,6 +251,7 @@ model Credit {
   interestRate      Decimal      @db.Decimal(8, 4)
   installmentCount  Int
   installmentAmount Decimal      @db.Decimal(14, 2)
+  paymentFrequency  PaymentFrequency @default(MONTHLY)
   totalAmount       Decimal      @db.Decimal(14, 2)
   disbursedAt       DateTime?
   firstDueDate      DateTime?
