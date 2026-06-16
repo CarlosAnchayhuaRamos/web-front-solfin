@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { apiBaseUrl } from '../api/client';
+import { apiBaseUrl, clearStoredAuthSession } from '../api/client';
 
 export type AppRole = 'ADMIN' | 'ANALYST' | 'CASHIER';
 
@@ -45,6 +45,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(storedUser);
   }, []);
 
+  useEffect(() => {
+    const handleExpiredSession = () => {
+      setError('Sesion expirada. Inicia sesion nuevamente.');
+      setIsAuthenticated(false);
+      setToken(null);
+      setUser(null);
+    };
+
+    window.addEventListener('solfin-auth-expired', handleExpiredSession);
+    return () => window.removeEventListener('solfin-auth-expired', handleExpiredSession);
+  }, []);
+
   const login = useCallback(async (input: LoginInput) => {
     setError(null);
 
@@ -60,9 +72,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setIsAuthenticated(false);
         setToken(null);
         setUser(null);
-        window.localStorage.removeItem(authStorageKey);
-        window.localStorage.removeItem(authTokenKey);
-        window.localStorage.removeItem(authUserKey);
+        clearStoredAuthSession();
         return false;
       }
 
@@ -80,9 +90,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsAuthenticated(false);
       setToken(null);
       setUser(null);
-      window.localStorage.removeItem(authStorageKey);
-      window.localStorage.removeItem(authTokenKey);
-      window.localStorage.removeItem(authUserKey);
+      clearStoredAuthSession();
       return false;
     }
   }, []);
@@ -92,9 +100,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsAuthenticated(false);
     setToken(null);
     setUser(null);
-    window.localStorage.removeItem(authStorageKey);
-    window.localStorage.removeItem(authTokenKey);
-    window.localStorage.removeItem(authUserKey);
+    clearStoredAuthSession();
+    if (window.location.pathname !== '/login') window.location.assign('/login');
   }, []);
 
   const value = useMemo(
