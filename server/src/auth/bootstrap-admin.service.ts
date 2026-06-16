@@ -65,9 +65,13 @@ export class BootstrapAdminService implements OnModuleInit {
       update: {},
       where: { clerkOrganizationId: 'org_demo_solfin' },
     });
-    const existingAdmin = await this.prisma.appUser.findFirst({
+    const existingAdminByEmail = await this.prisma.appUser.findFirst({
       where: { email, organizationId: organization.id },
     });
+    const existingBootstrapAdmin = await this.prisma.appUser.findFirst({
+      where: { id: 'user_bootstrap_admin', organizationId: organization.id },
+    });
+    const existingAdmin = existingAdminByEmail ?? existingBootstrapAdmin;
     const salt = randomBytes(16).toString('base64url');
     const iterations = 120000;
     const hash = pbkdf2Sync(password, salt, iterations, 32, 'sha256').toString('base64url');
@@ -80,8 +84,21 @@ export class BootstrapAdminService implements OnModuleInit {
       },
     });
 
-    return this.prisma.appUser.upsert({
-      create: {
+    if (existingAdmin) {
+      return this.prisma.appUser.update({
+        data: {
+          email,
+          fullName: this.configService.get<string>('BOOTSTRAP_ADMIN_NAME') ?? 'Administrador SOLFIN',
+          isActive: true,
+          passwordHash: `pbkdf2$${iterations}$${salt}$${hash}`,
+          role: UserRole.ADMIN,
+        },
+        where: { id: existingAdmin.id },
+      });
+    }
+
+    return this.prisma.appUser.create({
+      data: {
         email,
         fullName: this.configService.get<string>('BOOTSTRAP_ADMIN_NAME') ?? 'Administrador SOLFIN',
         id: 'user_bootstrap_admin',
@@ -89,14 +106,6 @@ export class BootstrapAdminService implements OnModuleInit {
         passwordHash: `pbkdf2$${iterations}$${salt}$${hash}`,
         role: UserRole.ADMIN,
       },
-      update: {
-        email,
-        fullName: this.configService.get<string>('BOOTSTRAP_ADMIN_NAME') ?? 'Administrador SOLFIN',
-        isActive: true,
-        passwordHash: `pbkdf2$${iterations}$${salt}$${hash}`,
-        role: UserRole.ADMIN,
-      },
-      where: { id: existingAdmin?.id ?? 'user_bootstrap_admin' },
     });
   }
 

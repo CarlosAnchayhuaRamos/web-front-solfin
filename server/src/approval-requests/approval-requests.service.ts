@@ -168,20 +168,33 @@ export class ApprovalRequestsService {
   }
 
   private async getReviewer(organizationId: string) {
-    return this.prisma.appUser.upsert({
-      create: {
+    const existingReviewerByEmail = await this.prisma.appUser.findFirst({
+      where: { email: demoReviewer.email, organizationId },
+    });
+    const existingDemoReviewer = await this.prisma.appUser.findFirst({
+      where: { id: demoReviewer.id, organizationId },
+    });
+    const existingReviewer = existingReviewerByEmail ?? existingDemoReviewer;
+
+    if (existingReviewer) {
+      return this.prisma.appUser.update({
+        data: {
+          email: demoReviewer.email,
+          fullName: demoReviewer.fullName,
+          role: demoReviewer.role,
+        },
+        where: { id: existingReviewer.id },
+      });
+    }
+
+    return this.prisma.appUser.create({
+      data: {
         email: demoReviewer.email,
         fullName: demoReviewer.fullName,
         id: demoReviewer.id,
         organizationId,
         role: demoReviewer.role,
       },
-      update: {
-        email: demoReviewer.email,
-        fullName: demoReviewer.fullName,
-        role: demoReviewer.role,
-      },
-      where: { id: demoReviewer.id },
     });
   }
 
