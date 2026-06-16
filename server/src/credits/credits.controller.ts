@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
-import { CurrentUser, Roles } from '../auth/auth.decorators';
+import { CurrentUser, Public, Roles } from '../auth/auth.decorators';
 import type { AuthTokenPayload } from '../auth/auth.types';
 import { CreditsService } from './credits.service';
 import type { AssignCreditAdvisorInput, CreateCreditInput, CreditSimulationInput, DisburseCreditInput, PayInstallmentsInput } from './credits.types';
@@ -8,6 +8,16 @@ import type { AssignCreditAdvisorInput, CreateCreditInput, CreditSimulationInput
 @Controller('credits')
 export class CreditsController {
   constructor(private readonly creditsService: CreditsService) {}
+
+  @Get()
+  @Public()
+  getInfo() {
+    return {
+      endpoints: ['POST /credits', 'POST /credits/simulate', 'GET /credits/client/:clientId/approved'],
+      name: 'SOLFIN Credits API',
+      status: 'ok',
+    };
+  }
 
   @Post('simulate')
   @Roles(UserRole.ADMIN, UserRole.ANALYST)
