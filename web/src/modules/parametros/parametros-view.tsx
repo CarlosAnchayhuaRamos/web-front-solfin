@@ -2,9 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { Button } from '../../common/components/Button';
 import { Card, CardBody, CardHeader } from '../../common/components/Card';
 import { PageHeader } from '../../common/layout/PageHeader';
-import { initialCashPolicyForm, initialCreditPolicyForm } from './data';
+import { initialCashPolicyForm, initialCreditPolicyForm, paymentFrequencyLabels, penaltyFrequencyKeys, penaltyMethodOptions } from './data';
 import { toCashPolicyFormState, toCreditPolicyFormState, useCashPolicy, useCreditPolicy } from './hooks';
-import type { CashPolicyFormState, CreditPolicyFormState } from './types';
+import type { CashPolicyFormState, CreditPolicyFormState, PaymentFrequencyKey, PenaltyFrequencyFormState } from './types';
 
 export const ParametrosView: React.FC = () => {
   const credit = useCreditPolicy();
@@ -30,9 +30,21 @@ export const ParametrosView: React.FC = () => {
       [field]:
         typeof value === 'string' && field === 'defaultInterestRate'
           ? limitDecimals(value, 1)
-          : typeof value === 'string' && field === 'defaultPenaltyRate'
-            ? limitDecimals(value, 2)
-            : value,
+          : value,
+    }));
+  };
+
+  const handlePenaltySettingChange = (frequency: PaymentFrequencyKey, field: keyof PenaltyFrequencyFormState, value: string) => {
+    setSaveMessage(null);
+    setCreditForm((currentForm) => ({
+      ...currentForm,
+      penaltySettings: {
+        ...currentForm.penaltySettings,
+        [frequency]: {
+          ...currentForm.penaltySettings[frequency],
+          [field]: field === 'rate' || field === 'capRate' || field === 'fixedDailyAmount' ? limitDecimals(value, 2) : value,
+        },
+      },
     }));
   };
 
@@ -116,7 +128,7 @@ export const ParametrosView: React.FC = () => {
       ) : null}
       {saveMessage ? (
         <Card>
-          <CardBody>{saveMessage}</CardBody>
+          <CardBody className="message--success">{saveMessage}</CardBody>
         </Card>
       ) : null}
       <form className="grid grid--two" id="parameters-form" onSubmit={handleSubmit}>
@@ -133,17 +145,6 @@ export const ParametrosView: React.FC = () => {
                   step="1"
                   type="number"
                   value={creditForm.defaultInterestRate}
-                />
-              </div>
-              <div className="field">
-                <label htmlFor="defaultPenaltyRate">Mora diaria</label>
-                <input
-                  id="defaultPenaltyRate"
-                  min="0"
-                  onChange={(event) => handleCreditChange('defaultPenaltyRate', event.target.value)}
-                  step="0.01"
-                  type="number"
-                  value={creditForm.defaultPenaltyRate}
                 />
               </div>
               <div className="field">
@@ -199,6 +200,88 @@ export const ParametrosView: React.FC = () => {
                 />
                 Requiere aprobacion sobre limite
               </label>
+              <div className="field field--full">
+                <label>Mora por frecuencia</label>
+                <div className="settings-list">
+                  {penaltyFrequencyKeys.map((frequency) => {
+                    const setting = creditForm.penaltySettings[frequency];
+                    const isFixedDaily = setting.method === 'FIXED_DAILY';
+                    const isCappedSimple = setting.method === 'CAPPED_SIMPLE';
+
+                    return (
+                      <div className="settings-panel" key={frequency}>
+                        <strong>{paymentFrequencyLabels[frequency]}</strong>
+                        <div className="form-grid">
+                          <div className="field">
+                            <label htmlFor={`${frequency}-penalty-method`}>Tipo de mora</label>
+                            <select
+                              id={`${frequency}-penalty-method`}
+                              onChange={(event) => handlePenaltySettingChange(frequency, 'method', event.target.value)}
+                              value={setting.method}
+                            >
+                              {penaltyMethodOptions.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          {!isFixedDaily ? (
+                            <div className="field">
+                              <label htmlFor={`${frequency}-penalty-rate`}>Tasa diaria (%)</label>
+                              <input
+                                id={`${frequency}-penalty-rate`}
+                                min="0"
+                                onChange={(event) => handlePenaltySettingChange(frequency, 'rate', event.target.value)}
+                                step="0.01"
+                                type="number"
+                                value={setting.rate}
+                              />
+                            </div>
+                          ) : null}
+                          {isCappedSimple ? (
+                            <div className="field">
+                              <label htmlFor={`${frequency}-penalty-cap`}>Tope por cuota (%)</label>
+                              <input
+                                id={`${frequency}-penalty-cap`}
+                                min="0"
+                                onChange={(event) => handlePenaltySettingChange(frequency, 'capRate', event.target.value)}
+                                step="0.01"
+                                type="number"
+                                value={setting.capRate}
+                              />
+                            </div>
+                          ) : null}
+                          {isFixedDaily ? (
+                            <div className="field">
+                              <label htmlFor={`${frequency}-fixed-daily-amount`}>Monto diario (S/)</label>
+                              <input
+                                id={`${frequency}-fixed-daily-amount`}
+                                min="0"
+                                onChange={(event) => handlePenaltySettingChange(frequency, 'fixedDailyAmount', event.target.value)}
+                                step="0.01"
+                                type="number"
+                                value={setting.fixedDailyAmount}
+                              />
+                            </div>
+                          ) : null}
+                          <div className="field">
+                            <label htmlFor={`${frequency}-grace-days`}>Dias de gracia</label>
+                            <input
+                              id={`${frequency}-grace-days`}
+                              min="0"
+                              onChange={(event) => handlePenaltySettingChange(frequency, 'graceDays', event.target.value)}
+                              step="1"
+                              type="number"
+                              value={setting.graceDays}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           </CardBody>
         </Card>

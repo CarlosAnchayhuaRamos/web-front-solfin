@@ -1,4 +1,4 @@
-import type { ClientFilters, ClientFormState, ClientStatus } from './types';
+import type { ClientFilters, ClientFormState, ClientStatus, CreditDocumentChecklist } from './types';
 
 export const clientStatusOptions: Array<{ label: string; value: ClientStatus }> = [
   { label: 'Activo', value: 'ACTIVE' },
@@ -22,4 +22,10 @@ export const initialClientForm: ClientFormState = {
 export const initialClientFilters: ClientFilters = {
   dni: '',
   name: '',
+};
+
+export const initialCreditDocumentChecklist: CreditDocumentChecklist = {
+  contract: false,
+  disbursementRequest: false,
+  schedule: false,
 };

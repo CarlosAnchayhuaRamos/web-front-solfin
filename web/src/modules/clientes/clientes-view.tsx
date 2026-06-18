@@ -5,12 +5,20 @@ import { hasRole, useAuth } from '../../common/auth/AuthProvider';
 import { formatDueDate, formatMoney, formatPercentage } from '../../common/lib/format';
 import { escapePrintHtml, getPrintBrandMarkup, getPrintBrandStyles, printDocument } from '../../common/lib/print';
 import { PageHeader } from '../../common/layout/PageHeader';
-import { clientStatusOptions, initialClientFilters, initialClientForm } from './data';
+import { clientStatusOptions, initialClientFilters, initialClientForm, initialCreditDocumentChecklist } from './data';
 import { useClientCredits, useClients } from './hooks';
-import { filterClients, getClientRiskColor, getClientRiskLabel, toClientFormState } from './lib';
+import {
+  filterClients,
+  getClientRiskColor,
+  getClientRiskLabel,
+  getCreditDocumentChecklist,
+  getPendingCreditDocumentLabels,
+  isCreditDocumentChecklistComplete,
+  toClientFormState,
+} from './lib';
 import { printApprovedPaymentSchedule, printCreditContract, printDisbursementRequest } from '../solicitudes/lib';
 import type { CreditContractData } from '../solicitudes/types';
-import type { Client, ClientCredit, ClientFilters, ClientFormState, PaymentVoucher } from './types';
+import type { Client, ClientCredit, ClientFilters, ClientFormState, CreditDocumentChecklist, CreditDocumentType, PaymentVoucher } from './types';
 
 const emptyPaymentVoucher: PaymentVoucher = {
   amount: 0,
@@ -53,6 +61,7 @@ export const ClientesView: React.FC = () => {
   const [selectedCreditId, setSelectedCreditId] = useState<string | null>(null);
   const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
+  const [generatedDocumentsByCreditId, setGeneratedDocumentsByCreditId] = useState<Record<string, CreditDocumentChecklist>>({});
   const isEditMode = Boolean(selectedClient);
 
   useEffect(() => {
@@ -75,6 +84,9 @@ export const ClientesView: React.FC = () => {
   const canPrintClientCreditDocuments = canUseCashSessions;
   const ownOpenCashSession = user ? openCashSessions?.find((session) => session.userId === user.id) ?? null : null;
   const isSelectedCreditDisbursed = selectedCredit?.status === 'ACTIVE' || selectedCredit?.status === 'OVERDUE';
+  const selectedCreditDocuments = getCreditDocumentChecklist(generatedDocumentsByCreditId, selectedCreditId);
+  const areSelectedCreditDocumentsReady = isCreditDocumentChecklistComplete(selectedCreditDocuments);
+  const pendingCreditDocumentLabels = getPendingCreditDocumentLabels(selectedCreditDocuments);
 
   const handleChange = (field: keyof ClientFormState, value: string) => {
     setForm((currentForm) => ({
@@ -132,11 +144,12 @@ export const ClientesView: React.FC = () => {
   const handleDisburseCredit = async (creditId: string) => {
     if (!canDisburseCredits) return;
     if (!user) return;
+    if (!isCreditDocumentChecklistComplete(getCreditDocumentChecklist(generatedDocumentsByCreditId, creditId))) return;
 
     await disburseCredit(creditId, user.id);
   };
 
-  const handlePrintApprovedDocument = (printDocumentHandler: (printWindow: Window, contract: CreditContractData) => void) => {
+  const handlePrintApprovedDocument = (documentType: CreditDocumentType, printDocumentHandler: (printWindow: Window, contract: CreditContractData) => void) => {
     if (!selectedClient) return;
     if (!selectedCredit) return;
     if (selectedCredit.status !== 'APPROVED') return;
@@ -145,6 +158,13 @@ export const ClientesView: React.FC = () => {
 
     if (!printWindow) return;
     printDocumentHandler(printWindow, toCreditContractData(selectedClient, selectedCredit));
+    setGeneratedDocumentsByCreditId((currentDocuments) => ({
+      ...currentDocuments,
+      [selectedCredit.id]: {
+        ...(currentDocuments[selectedCredit.id] ?? initialCreditDocumentChecklist),
+        [documentType]: true,
+      },
+    }));
   };
 
   const getSubmitLabel = () => {
@@ -398,7 +418,11 @@ export const ClientesView: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {credits.map((credit) => (
+                      {credits.map((credit) => {
+                        const creditDocuments = getCreditDocumentChecklist(generatedDocumentsByCreditId, credit.id);
+                        const areCreditDocumentsReady = isCreditDocumentChecklistComplete(creditDocuments);
+
+                        return (
                         <tr
                           className={selectedCreditId === credit.id ? 'table__row--selected' : undefined}
                           key={credit.id}
@@ -436,7 +460,7 @@ export const ClientesView: React.FC = () => {
                             {credit.status === 'APPROVED' && canDisburseCredits ? (
                               <Button
                                 className="button--compact"
-                                disabled={!canDisburseCredits || !ownOpenCashSession || isDisbursing}
+                                disabled={!canDisburseCredits || !ownOpenCashSession || isDisbursing || !areCreditDocumentsReady}
                                 onClick={() => void handleDisburseCredit(credit.id)}
                               >
                                 Desembolsar
@@ -446,7 +470,8 @@ export const ClientesView: React.FC = () => {
                             )}
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -462,17 +487,33 @@ export const ClientesView: React.FC = () => {
             </div>
             <div className="card__body">
               {selectedCredit?.status === 'APPROVED' && canPrintClientCreditDocuments ? (
-                <div className="actions">
-                  <Button className="button--compact button--document" onClick={() => handlePrintApprovedDocument(printApprovedPaymentSchedule)} variant="outline">
-                    Cronograma
-                  </Button>
-                  <Button className="button--compact button--document" onClick={() => handlePrintApprovedDocument(printCreditContract)} variant="outline">
-                    Contrato
-                  </Button>
-                  <Button className="button--compact button--document" onClick={() => handlePrintApprovedDocument(printDisbursementRequest)} variant="outline">
-                    Solicitud de desembolso
-                  </Button>
-                </div>
+                <>
+                  <div className="actions">
+                    <Button
+                      className={selectedCreditDocuments.schedule ? 'button--compact button--document button--document-ready' : 'button--compact button--document'}
+                      onClick={() => handlePrintApprovedDocument('schedule', printApprovedPaymentSchedule)}
+                      variant="outline"
+                    >
+                      Cronograma
+                    </Button>
+                    <Button
+                      className={selectedCreditDocuments.contract ? 'button--compact button--document button--document-ready' : 'button--compact button--document'}
+                      onClick={() => handlePrintApprovedDocument('contract', printCreditContract)}
+                      variant="outline"
+                    >
+                      Contrato
+                    </Button>
+                    <Button
+                      className={selectedCreditDocuments.disbursementRequest ? 'button--compact button--document button--document-ready' : 'button--compact button--document'}
+                      onClick={() => handlePrintApprovedDocument('disbursementRequest', printDisbursementRequest)}
+                      variant="outline"
+                    >
+                      Solicitud de desembolso
+                    </Button>
+                  </div>
+                  {!areSelectedCreditDocumentsReady ? <p className="message--warning">Genera antes de desembolsar: {pendingCreditDocumentLabels}.</p> : null}
+                  {areSelectedCreditDocumentsReady ? <p className="message--success">Documentos generados. Credito listo para desembolso.</p> : null}
+                </>
               ) : null}
               {voucher && false ? (
                 <div className="voucher">

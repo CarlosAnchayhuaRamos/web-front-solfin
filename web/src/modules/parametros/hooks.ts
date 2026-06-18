@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { apiBaseUrl, apiFetch } from '../../common/api/client';
-import type { CashPolicy, CashPolicyFormState, CreditPolicy, CreditPolicyFormState } from './types';
+import { clonePenaltySettingsForm, initialCreditPolicyForm, penaltyFrequencyKeys } from './data';
+import type { CashPolicy, CashPolicyFormState, CreditPolicy, CreditPolicyFormState, PenaltySettings, PenaltySettingsFormState } from './types';
 
 const getApiErrorMessage = async (response: Response) => {
   try {
@@ -22,6 +23,7 @@ export const toCreditPolicyFormState = (policy: CreditPolicy): CreditPolicyFormS
     maxAnalystApprovalAmount: String(policy.maxAnalystApprovalAmount),
     maxInstallments: String(policy.maxInstallments),
     maxRequestFiles: String(policy.maxRequestFiles),
+    penaltySettings: toPenaltySettingsFormState(policy.penaltySettings),
     requireApprovalAboveLimit: policy.requireApprovalAboveLimit,
   };
 };
@@ -29,13 +31,50 @@ export const toCreditPolicyFormState = (policy: CreditPolicy): CreditPolicyFormS
 export const toCreditPolicyInput = (form: CreditPolicyFormState): CreditPolicy => {
   return {
     defaultInterestRate: Math.round(Number(form.defaultInterestRate) * 10) / 1000,
-    defaultPenaltyRate: Number(form.defaultPenaltyRate) / 100,
+    defaultPenaltyRate: Number(form.penaltySettings.DAILY.rate) / 100,
     graceDays: Number(form.graceDays),
     maxAnalystApprovalAmount: Number(form.maxAnalystApprovalAmount),
     maxInstallments: Number(form.maxInstallments),
     maxRequestFiles: Number(form.maxRequestFiles),
+    penaltySettings: toPenaltySettingsInput(form.penaltySettings),
     requireApprovalAboveLimit: form.requireApprovalAboveLimit,
   };
+};
+
+const toPenaltySettingsFormState = (settings: PenaltySettings): PenaltySettingsFormState => {
+  const initialSettings = clonePenaltySettingsForm(initialCreditPolicyForm.penaltySettings);
+
+  return penaltyFrequencyKeys.reduce((formSettings, frequency) => {
+    const setting = settings[frequency];
+
+    return {
+      ...formSettings,
+      [frequency]: {
+        capRate: String(setting.capRate * 100),
+        fixedDailyAmount: String(setting.fixedDailyAmount),
+        graceDays: String(setting.graceDays),
+        method: setting.method,
+        rate: String(setting.rate * 100),
+      },
+    };
+  }, initialSettings);
+};
+
+const toPenaltySettingsInput = (settings: PenaltySettingsFormState): PenaltySettings => {
+  return penaltyFrequencyKeys.reduce((inputSettings, frequency) => {
+    const setting = settings[frequency];
+
+    return {
+      ...inputSettings,
+      [frequency]: {
+        capRate: Number(setting.capRate) / 100,
+        fixedDailyAmount: Number(setting.fixedDailyAmount),
+        graceDays: Number(setting.graceDays),
+        method: setting.method,
+        rate: Number(setting.rate) / 100,
+      },
+    };
+  }, {} as PenaltySettings);
 };
 
 export const toCashPolicyFormState = (policy: CashPolicy): CashPolicyFormState => {

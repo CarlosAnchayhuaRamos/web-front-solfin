@@ -1,4 +1,5 @@
-import type { Client, ClientFilters, ClientFormState } from './types';
+import { initialCreditDocumentChecklist } from './data';
+import type { Client, ClientFilters, ClientFormState, CreditDocumentChecklist } from './types';
 
 export const getClientRiskLabel = (client: Client) => {
   if (client.status === 'BLOCKED') return 'Bloqueado';
@@ -50,4 +51,28 @@ export const filterClients = (clients: Client[], filters: ClientFilters) => {
 
     return matchesName && matchesDni;
   });
+};
+
+export const getCreditDocumentChecklist = (
+  documentsByCreditId: Record<string, CreditDocumentChecklist>,
+  creditId: string | null,
+) => {
+  if (!creditId) return initialCreditDocumentChecklist;
+  return documentsByCreditId[creditId] ?? initialCreditDocumentChecklist;
+};
+
+export const isCreditDocumentChecklistComplete = (checklist: CreditDocumentChecklist) => {
+  if (!checklist.schedule) return false;
+  if (!checklist.contract) return false;
+  return checklist.disbursementRequest;
+};
+
+export const getPendingCreditDocumentLabels = (checklist: CreditDocumentChecklist) => {
+  const labels: string[] = [];
+
+  if (!checklist.schedule) labels.push('cronograma');
+  if (!checklist.contract) labels.push('contrato');
+  if (!checklist.disbursementRequest) labels.push('solicitud de desembolso');
+
+  return labels.join(', ');
 };

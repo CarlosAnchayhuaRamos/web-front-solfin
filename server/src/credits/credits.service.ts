@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { CreditStatus, CreditType, DocumentType, PaymentFrequency, PaymentMethod, PaymentStatus, StorageProvider, UserRole } from '@prisma/client';
+import { normalizePenaltySettings } from '../parameters/parameters.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type { AssignCreditAdvisorInput, CreateCreditInput, CreditSimulationInput, CreditSimulationResult, DisburseCreditInput, PayInstallmentsInput } from './credits.types';
 
@@ -185,6 +186,8 @@ export class CreditsService {
     });
 
     if (requiresAdminApproval) return { ...credit, contract: null };
+    const penaltySettings = normalizePenaltySettings(policy.penaltySettings, Number(policy.defaultPenaltyRate), policy.graceDays);
+    const penaltySetting = penaltySettings[input.paymentFrequency];
 
     return {
       ...credit,
@@ -200,7 +203,7 @@ export class CreditsService {
         installmentCount: credit.installmentCount,
         interestRate: Number(credit.interestRate),
         paymentFrequency: credit.paymentFrequency,
-        penaltyRate: Number(policy.defaultPenaltyRate),
+        penaltyRate: penaltySetting.rate,
         principalAmount: Number(credit.principalAmount),
         schedules: credit.schedules.map((schedule) => ({
           dueDate: schedule.dueDate.toISOString(),
@@ -217,6 +220,7 @@ export class CreditsService {
   async findApprovedByClient(clientId: string) {
     const organization = await this.getOrganization();
     const policy = await this.getCreditPolicy(organization.id);
+    const penaltySettings = normalizePenaltySettings(policy.penaltySettings, Number(policy.defaultPenaltyRate), policy.graceDays);
 
     const credits = await this.prisma.credit.findMany({
       include: {
@@ -236,9 +240,9 @@ export class CreditsService {
     return credits.map((credit) => {
       const netValue = Number(credit.totalAmount) - Number(credit.principalAmount);
       const overdueAmount = credit.schedules.reduce((total, schedule) => {
-        if (schedule.status !== PaymentStatus.OVERDUE) return total;
-        return total + Number(schedule.penalty);
+        return total + this.calculatePenalty(schedule, credit.paymentFrequency, penaltySettings);
       }, 0);
+      const penaltySetting = penaltySettings[credit.paymentFrequency];
 
       return {
         advisorId: credit.analyst.id,
@@ -252,7 +256,7 @@ export class CreditsService {
         netValue,
         overdueAmount,
         paymentFrequency: credit.paymentFrequency,
-        penaltyRate: Number(policy.defaultPenaltyRate),
+        penaltyRate: penaltySetting.rate,
         principalAmount: Number(credit.principalAmount),
         schedules: credit.schedules.map((schedule) => ({
           dueDate: schedule.dueDate.toISOString().slice(0, 10),
@@ -260,9 +264,9 @@ export class CreditsService {
           installmentNo: schedule.installmentNo,
           interest: Number(schedule.interest),
           paidAmount: Number(schedule.paidAmount),
-          penalty: Number(schedule.penalty),
+          penalty: this.calculatePenalty(schedule, credit.paymentFrequency, penaltySettings),
           principal: Number(schedule.principal),
-          status: schedule.status,
+          status: this.getScheduleStatus(schedule),
           totalDue: Number(schedule.totalDue),
         })),
         status: credit.status,
@@ -357,6 +361,8 @@ export class CreditsService {
       throw new BadRequestException('No hay cuotas pendientes');
     }
 
+    const policy = await this.getCreditPolicy(organization.id);
+    const penaltySettings = normalizePenaltySettings(policy.penaltySettings, Number(policy.defaultPenaltyRate), policy.graceDays);
     const cashSession = await this.findOpenCashSession(organization.id, input.userId);
 
     if (!cashSession) {
@@ -364,7 +370,10 @@ export class CreditsService {
     }
 
     const totalPending = this.roundMoney(
-      schedules.reduce((total, schedule) => total + Number(schedule.totalDue) + Number(schedule.penalty) - Number(schedule.paidAmount), 0),
+      schedules.reduce((total, schedule) => {
+        const penalty = this.calculatePenalty(schedule, credit.paymentFrequency, penaltySettings);
+        return total + Number(schedule.totalDue) + penalty - Number(schedule.paidAmount);
+      }, 0),
     );
 
     if (paymentAmount > totalPending) {
@@ -378,10 +387,11 @@ export class CreditsService {
       for (const schedule of schedules) {
         if (remainingAmount <= 0) break;
 
-        const schedulePending = this.roundMoney(Number(schedule.totalDue) + Number(schedule.penalty) - Number(schedule.paidAmount));
+        const schedulePenalty = this.calculatePenalty(schedule, credit.paymentFrequency, penaltySettings);
+        const schedulePending = this.roundMoney(Number(schedule.totalDue) + schedulePenalty - Number(schedule.paidAmount));
         const appliedAmount = this.roundMoney(Math.min(remainingAmount, schedulePending));
         const newPaidAmount = this.roundMoney(Number(schedule.paidAmount) + appliedAmount);
-        const isPaid = newPaidAmount >= Number(schedule.totalDue) + Number(schedule.penalty);
+        const isPaid = newPaidAmount >= Number(schedule.totalDue) + schedulePenalty;
         const payment = await tx.payment.create({
           data: {
             amount: appliedAmount,
@@ -395,6 +405,7 @@ export class CreditsService {
           data: {
             paidAmount: newPaidAmount,
             paidAt: isPaid ? new Date() : null,
+            penalty: schedulePenalty,
             status: isPaid ? PaymentStatus.PAID : PaymentStatus.PARTIAL,
           },
           where: { id: schedule.id },
@@ -616,6 +627,7 @@ export class CreditsService {
         maxInstallments: 12,
         maxRequestFiles: 5,
         organizationId,
+        penaltySettings: normalizePenaltySettings(null, 0.005, 2),
         requireApprovalAboveLimit: true,
       } as never,
       update: {},
@@ -654,6 +666,48 @@ export class CreditsService {
     }
   }
 
+  private calculatePenalty(
+    schedule: { dueDate: Date; paidAmount: unknown; penalty: unknown; status: PaymentStatus; totalDue: unknown },
+    paymentFrequency: PaymentFrequency,
+    penaltySettings: ReturnType<typeof normalizePenaltySettings>,
+  ) {
+    if (schedule.status === PaymentStatus.PAID || schedule.status === PaymentStatus.CANCELED) return Number(schedule.penalty);
+
+    const setting = penaltySettings[paymentFrequency];
+    const daysLate = this.getPenaltyDays(schedule.dueDate, setting.graceDays);
+
+    if (daysLate <= 0) return 0;
+
+    const pendingBase = this.roundMoney(Math.max(0, Number(schedule.totalDue) - Number(schedule.paidAmount)));
+
+    if (pendingBase <= 0) return 0;
+
+    if (setting.method === 'FIXED_DAILY') {
+      return this.roundMoney(setting.fixedDailyAmount * daysLate);
+    }
+
+    const simplePenalty = this.roundMoney(pendingBase * setting.rate * daysLate);
+
+    if (setting.method === 'SIMPLE') return simplePenalty;
+
+    return this.roundMoney(Math.min(simplePenalty, pendingBase * setting.capRate));
+  }
+
+  private getScheduleStatus(schedule: { dueDate: Date; status: PaymentStatus }) {
+    if (schedule.status === PaymentStatus.PAID || schedule.status === PaymentStatus.CANCELED) return schedule.status;
+    if (this.getPenaltyDays(schedule.dueDate, 0) <= 0) return schedule.status;
+    return PaymentStatus.OVERDUE;
+  }
+
+  private getPenaltyDays(dueDate: Date, graceDays: number) {
+    const today = new Date();
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const dueDateStart = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+    const daysLate = Math.floor((todayStart.getTime() - dueDateStart.getTime()) / 86_400_000);
+
+    return Math.max(0, daysLate - graceDays);
+  }
+
   private roundMoney(value: number) {
     return Math.round(value * 100) / 100;
   }
@@ -673,11 +727,11 @@ export class CreditsService {
     }
 
     if (paymentFrequency === PaymentFrequency.WEEKLY) {
-      dueDate.setDate(dueDate.getDate() + installmentNo * 7);
+      dueDate.setDate(dueDate.getDate() + (installmentNo - 1) * 7);
       return dueDate;
     }
 
-    dueDate.setMonth(dueDate.getMonth() + installmentNo);
+    dueDate.setMonth(dueDate.getMonth() + installmentNo - 1);
     return dueDate;
   }
 

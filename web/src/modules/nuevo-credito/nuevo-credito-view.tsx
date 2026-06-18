@@ -134,7 +134,7 @@ export const NuevoCreditoView: React.FC = () => {
       ) : null}
       {successMessage ? (
         <div className="card">
-          <div className="card__body">{successMessage}</div>
+          <div className="card__body message--success">{successMessage}</div>
         </div>
       ) : null}
       <section className="grid grid--two">

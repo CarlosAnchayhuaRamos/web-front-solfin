@@ -1,3 +1,17 @@
+export type PenaltyMethod = 'SIMPLE' | 'CAPPED_SIMPLE' | 'FIXED_DAILY';
+
+export type PaymentFrequencyKey = 'DAILY' | 'WEEKLY' | 'MONTHLY';
+
+export interface PenaltyFrequencySetting {
+  capRate: number;
+  fixedDailyAmount: number;
+  graceDays: number;
+  method: PenaltyMethod;
+  rate: number;
+}
+
+export type PenaltySettings = Record<PaymentFrequencyKey, PenaltyFrequencySetting>;
+
 export interface CreditPolicyDto {
   defaultInterestRate: number;
   defaultPenaltyRate: number;
@@ -5,6 +19,7 @@ export interface CreditPolicyDto {
   maxAnalystApprovalAmount: number;
   maxInstallments: number;
   maxRequestFiles: number;
+  penaltySettings: PenaltySettings;
   requireApprovalAboveLimit: boolean;
 }
 
@@ -15,6 +30,7 @@ export interface UpdateCreditPolicyInput {
   maxAnalystApprovalAmount: number;
   maxInstallments: number;
   maxRequestFiles: number;
+  penaltySettings: PenaltySettings;
   requireApprovalAboveLimit: boolean;
 }
 

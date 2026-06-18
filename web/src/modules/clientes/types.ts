@@ -38,6 +38,14 @@ export interface ClientFilters {
   name: string;
 }
 
+export type CreditDocumentType = 'schedule' | 'contract' | 'disbursementRequest';
+
+export interface CreditDocumentChecklist {
+  contract: boolean;
+  disbursementRequest: boolean;
+  schedule: boolean;
+}
+
 export interface ClientCreditSchedule {
   dueDate: string;
   id: string;

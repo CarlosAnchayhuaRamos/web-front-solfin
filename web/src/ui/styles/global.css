@@ -359,6 +359,12 @@ a {
   background: #e5e7eb;
 }
 
+.button--document-ready {
+  border-color: var(--primary);
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
 .grid {
   display: grid;
   gap: 16px;
@@ -491,6 +497,18 @@ a {
 .message--error {
   color: var(--destructive);
   font-weight: 700;
+}
+
+.message--success {
+  background: #dbeafe;
+  border-left: 4px solid var(--primary);
+  color: #1d4ed8;
+  font-weight: 800;
+}
+
+.message--warning {
+  color: #92400e;
+  font-weight: 800;
 }
 
 .badge {
@@ -638,6 +656,23 @@ a {
 .field--checkbox input {
   min-height: 18px;
   width: 18px;
+}
+
+.field--full {
+  grid-column: 1 / -1;
+}
+
+.settings-list {
+  display: grid;
+  gap: 12px;
+}
+
+.settings-panel {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 14px;
 }
 
 .field input:focus,

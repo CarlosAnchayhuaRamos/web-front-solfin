@@ -415,6 +415,7 @@ model CreditPolicy {
   maxRequestFiles           Int      @default(5)
   defaultInterestRate       Decimal  @default(0.12) @db.Decimal(8, 4)
   defaultPenaltyRate        Decimal  @db.Decimal(8, 4)
+  penaltySettings           Json     @default("{}")
   graceDays                 Int      @default(0)
   requireApprovalAboveLimit Boolean  @default(true)
   createdAt                 DateTime @default(now())

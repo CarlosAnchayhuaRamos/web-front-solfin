@@ -52,13 +52,13 @@ export const printCreditContract = (printWindow: Window, contract: CreditContrac
         <title>Contrato ${escapePrintHtml(contract.creditCode)}</title>
         <style>
           @page { margin: 18mm 16mm; size: A4; }
-          body { color: #111; font-family: Arial, sans-serif; font-size: 10.5pt; line-height: 1.45; margin: 0; }
-          h1 { font-size: 16pt; margin: 18px 0; text-align: center; }
-          h2 { font-size: 10.5pt; margin: 14px 0 3px; }
-          p { margin: 0 0 8px; text-align: justify; }
-          .meta { display: grid; gap: 3px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 12px 0; padding: 8px; border: 1px solid #aaa; }
+          body { color: #111; font-family: Arial, sans-serif; font-size: 9.5pt; line-height: 1.25; margin: 0; }
+          h1 { font-size: 14pt; margin: 12px 0; text-align: center; }
+          h2 { font-size: 9.5pt; margin: 9px 0 2px; }
+          p { margin: 0 0 5px; text-align: justify; }
+          .meta { display: grid; gap: 2px 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 8px 0 10px; }
           .meta p { margin: 0; text-align: left; }
-          .signatures { display: grid; gap: 48px 40px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 72px; page-break-inside: avoid; text-align: center; }
+          .signatures { display: grid; gap: 40px 40px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 56px; page-break-inside: avoid; text-align: center; }
           .signature { border-top: 1px solid #111; padding-top: 5px; }
           ${getPrintBrandStyles()}
         </style>
@@ -107,6 +107,9 @@ export const printCreditContract = (printWindow: Window, contract: CreditContrac
 export const printApprovedPaymentSchedule = (printWindow: Window, contract: CreditContractData) => {
   const clientName = escapePrintHtml(contract.clientName);
   const creditCode = escapePrintHtml(contract.creditCode);
+  const totalPrincipal = contract.schedules.reduce((total, schedule) => total + schedule.principal, 0);
+  const totalInterest = contract.schedules.reduce((total, schedule) => total + schedule.interest, 0);
+  const totalDue = contract.schedules.reduce((total, schedule) => total + schedule.totalDue, 0);
   const rows = contract.schedules
     .map(
       (schedule) => `
@@ -129,14 +132,16 @@ export const printApprovedPaymentSchedule = (printWindow: Window, contract: Cred
         <style>
           @page { margin: 16mm; size: A4; }
           body { color: #111827; font-family: Arial, sans-serif; margin: 0; }
-          h1 { font-size: 22px; margin: 20px 0 8px; }
+          h1 { font-size: 22px; margin: 20px 0 16px; text-align: center; }
           p { margin: 4px 0; }
           ${getPrintBrandStyles()}
           table { border-collapse: collapse; margin-top: 18px; width: 100%; }
           th, td { border: 1px solid #d1d5db; padding: 8px; text-align: right; }
           th { background: #f3f4f6; }
           th:first-child, td:first-child, th:nth-child(2), td:nth-child(2) { text-align: left; }
-          .total { font-size: 18px; font-weight: 700; margin-top: 12px; }
+          .meta { display: grid; gap: 6px 18px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0 0 12px; }
+          .meta p { margin: 0; }
+          .table-total td { font-weight: 700; }
           .signatures { display: grid; gap: 56px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 72px; page-break-inside: avoid; text-align: center; }
           .signature { border-top: 1px solid #111827; padding-top: 6px; }
           @media print { th { background: transparent; } }
@@ -145,20 +150,27 @@ export const printApprovedPaymentSchedule = (printWindow: Window, contract: Cred
       <body>
         ${getPrintBrandMarkup(window.location.origin)}
         <h1>Cronograma de pagos</h1>
-        <p><strong>Credito:</strong> ${creditCode}</p>
-        <p><strong>Cliente:</strong> ${clientName}</p>
-        <p><strong>Monto:</strong> ${formatContractMoney(contract.principalAmount)}</p>
-        <p><strong>Tasa mensual:</strong> ${(contract.interestRate * 100).toFixed(2)}%</p>
-        <p><strong>Frecuencia:</strong> ${getPaymentFrequencyLabel(contract.paymentFrequency)}</p>
-        <p><strong>Cuota:</strong> ${formatContractMoney(contract.installmentAmount)}</p>
-        <p class="total">Total: ${formatContractMoney(contract.totalAmount)}</p>
+        <section class="meta">
+          <p><strong>Credito:</strong> ${creditCode}</p>
+          <p><strong>Cliente:</strong> ${clientName}</p>
+          <p><strong>Monto:</strong> ${formatContractMoney(contract.principalAmount)}</p>
+          <p><strong>Frecuencia:</strong> ${getPaymentFrequencyLabel(contract.paymentFrequency)}</p>
+        </section>
         <table>
           <thead><tr><th>Cuota</th><th>Vence</th><th>Capital</th><th>Interes</th><th>Total</th></tr></thead>
-          <tbody>${rows}</tbody>
+          <tbody>
+            ${rows}
+            <tr class="table-total">
+              <td colspan="2">Total</td>
+              <td>${formatContractMoney(totalPrincipal)}</td>
+              <td>${formatContractMoney(totalInterest)}</td>
+              <td>${formatContractMoney(totalDue)}</td>
+            </tr>
+          </tbody>
         </table>
         <section class="signatures">
           <div class="signature"><strong>CLIENTE</strong><br />${clientName}</div>
-          <div class="signature"><strong>GERENTE DE LA EMPRESA</strong><br />${escapePrintHtml(contract.approvedByName)}</div>
+          <div class="signature"><strong>GERENTE DE LA EMPRESA</strong></div>
         </section>
       </body>
     </html>
