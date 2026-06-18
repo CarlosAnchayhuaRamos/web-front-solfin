@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import './ui/styles/global.css';
 import { ProtectedRoute } from './common/auth/ProtectedRoute';
 import { AppShell } from './common/layout/AppShell';
+import { HomeView } from './modules/home/home-view';
 import { LandingView } from './modules/landing/landing-view';
 import { InicioView } from './modules/inicio/inicio-view';
 import { SolicitudesView } from './modules/solicitudes/solicitudes-view';
@@ -17,7 +18,7 @@ const App: React.FC = () => {
   return (
     <BrowserRouter>
       <Routes>
-        <Route index element={<LandingView />} />
+        <Route index element={<HomeView />} />
         <Route path="/login" element={<LandingView />} />
         <Route element={<ProtectedRoute />}>
           <Route element={<AppShell />}>
