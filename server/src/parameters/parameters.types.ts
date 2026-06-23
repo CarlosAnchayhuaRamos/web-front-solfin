@@ -21,6 +21,7 @@ export interface CreditPolicyDto {
   maxRequestFiles: number;
   penaltySettings: PenaltySettings;
   requireApprovalAboveLimit: boolean;
+  specialInterestRate: number;
 }
 
 export interface UpdateCreditPolicyInput {
@@ -32,6 +33,7 @@ export interface UpdateCreditPolicyInput {
   maxRequestFiles: number;
   penaltySettings: PenaltySettings;
   requireApprovalAboveLimit: boolean;
+  specialInterestRate: number;
 }
 
 export interface CashPolicyDto {

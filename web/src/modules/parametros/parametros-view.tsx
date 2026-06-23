@@ -28,8 +28,8 @@ export const ParametrosView: React.FC = () => {
     setCreditForm((currentForm) => ({
       ...currentForm,
       [field]:
-        typeof value === 'string' && field === 'defaultInterestRate'
-          ? limitDecimals(value, 1)
+        typeof value === 'string' && (field === 'defaultInterestRate' || field === 'specialInterestRate')
+          ? limitDecimals(value, 3)
           : value,
     }));
   };
@@ -133,7 +133,7 @@ export const ParametrosView: React.FC = () => {
       ) : null}
       <form className="grid grid--two" id="parameters-form" onSubmit={handleSubmit}>
         <Card>
-          <CardHeader description="Interes continuo mensual: monto final = capital x e^(tasa x meses)." title="Credito" />
+          <CardHeader description="Tasas mensuales y reglas de aprobacion." title="Credito" />
           <CardBody>
             <div className="form-grid">
               <div className="field">
@@ -142,9 +142,20 @@ export const ParametrosView: React.FC = () => {
                   id="defaultInterestRate"
                   min="0"
                   onChange={(event) => handleCreditChange('defaultInterestRate', event.target.value)}
-                  step="1"
+                  step="0.001"
                   type="number"
                   value={creditForm.defaultInterestRate}
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="specialInterestRate">Tasa clientes especiales</label>
+                <input
+                  id="specialInterestRate"
+                  min="0"
+                  onChange={(event) => handleCreditChange('specialInterestRate', event.target.value)}
+                  step="0.001"
+                  type="number"
+                  value={creditForm.specialInterestRate}
                 />
               </div>
               <div className="field">

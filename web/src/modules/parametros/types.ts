@@ -37,6 +37,7 @@ export interface CreditPolicy {
   maxRequestFiles: number;
   penaltySettings: PenaltySettings;
   requireApprovalAboveLimit: boolean;
+  specialInterestRate: number;
 }
 
 export interface CreditPolicyFormState {
@@ -48,6 +49,7 @@ export interface CreditPolicyFormState {
   maxRequestFiles: string;
   penaltySettings: PenaltySettingsFormState;
   requireApprovalAboveLimit: boolean;
+  specialInterestRate: string;
 }
 
 export interface CashPolicy {

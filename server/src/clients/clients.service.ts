@@ -71,6 +71,7 @@ export class ClientsService {
           dni: input.dni.trim(),
           email: this.emptyToNull(input.email),
           firstName: input.firstName.trim(),
+          isSpecial: input.isSpecial ?? false,
           lastName: input.lastName.trim(),
           monthlyIncome: input.monthlyIncome,
           notes: this.emptyToNull(input.notes),
@@ -80,6 +81,7 @@ export class ClientsService {
           phone: input.phone.trim(),
           province: this.emptyToNull(input.province),
           status: input.status ?? ClientStatus.ACTIVE,
+          specialInterestRate: input.isSpecial ? input.specialInterestRate ?? null : null,
         },
       });
 
@@ -108,6 +110,7 @@ export class ClientsService {
           dni: input.dni.trim(),
           email: this.emptyToNull(input.email),
           firstName: input.firstName.trim(),
+          isSpecial: input.isSpecial ?? false,
           lastName: input.lastName.trim(),
           monthlyIncome: input.monthlyIncome,
           notes: this.emptyToNull(input.notes),
@@ -116,6 +119,7 @@ export class ClientsService {
           phone: input.phone.trim(),
           province: this.emptyToNull(input.province),
           status: input.status ?? ClientStatus.ACTIVE,
+          specialInterestRate: input.isSpecial ? input.specialInterestRate ?? null : null,
         },
         include: {
           _count: { select: { credits: true } },
@@ -190,6 +194,10 @@ export class ClientsService {
     if (!input.phone?.trim()) {
       throw new BadRequestException('El telefono es obligatorio');
     }
+
+    if (input.specialInterestRate != null && input.specialInterestRate < 0) {
+      throw new BadRequestException('La tasa especial no puede ser negativa');
+    }
   }
 
   private emptyToNull(value: string | undefined) {
@@ -212,9 +220,11 @@ export class ClientsService {
     birthDate: Date | null;
     firstName: string;
     id: string;
+    isSpecial: boolean;
     lastName: string;
     phone: string;
     status: ClientStatus;
+    specialInterestRate: Prisma.Decimal | null;
   }): ClientListItem {
     const totalDebt = client.credits.reduce((total, credit) => {
       return total + Number(credit.totalAmount);
@@ -229,10 +239,12 @@ export class ClientsService {
       firstName: client.firstName,
       fullName: `${client.firstName} ${client.lastName}`,
       id: client.id,
+      isSpecial: client.isSpecial,
       lastName: client.lastName,
       personalAddress: client.personalAddress,
       phone: client.phone,
       status: client.status,
+      specialInterestRate: client.specialInterestRate == null ? null : Number(client.specialInterestRate),
       totalDebt,
     };
   }

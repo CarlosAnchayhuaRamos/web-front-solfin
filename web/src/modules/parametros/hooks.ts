@@ -17,7 +17,7 @@ const getApiErrorMessage = async (response: Response) => {
 
 export const toCreditPolicyFormState = (policy: CreditPolicy): CreditPolicyFormState => {
   return {
-    defaultInterestRate: String(Math.round(policy.defaultInterestRate * 1000) / 10),
+    defaultInterestRate: toRateFormValue(policy.defaultInterestRate),
     defaultPenaltyRate: String(policy.defaultPenaltyRate * 100),
     graceDays: String(policy.graceDays),
     maxAnalystApprovalAmount: String(policy.maxAnalystApprovalAmount),
@@ -25,12 +25,13 @@ export const toCreditPolicyFormState = (policy: CreditPolicy): CreditPolicyFormS
     maxRequestFiles: String(policy.maxRequestFiles),
     penaltySettings: toPenaltySettingsFormState(policy.penaltySettings),
     requireApprovalAboveLimit: policy.requireApprovalAboveLimit,
+    specialInterestRate: toRateFormValue(policy.specialInterestRate),
   };
 };
 
 export const toCreditPolicyInput = (form: CreditPolicyFormState): CreditPolicy => {
   return {
-    defaultInterestRate: Math.round(Number(form.defaultInterestRate) * 10) / 1000,
+    defaultInterestRate: toRateInputValue(form.defaultInterestRate),
     defaultPenaltyRate: Number(form.penaltySettings.DAILY.rate) / 100,
     graceDays: Number(form.graceDays),
     maxAnalystApprovalAmount: Number(form.maxAnalystApprovalAmount),
@@ -38,7 +39,16 @@ export const toCreditPolicyInput = (form: CreditPolicyFormState): CreditPolicy =
     maxRequestFiles: Number(form.maxRequestFiles),
     penaltySettings: toPenaltySettingsInput(form.penaltySettings),
     requireApprovalAboveLimit: form.requireApprovalAboveLimit,
+    specialInterestRate: toRateInputValue(form.specialInterestRate),
   };
+};
+
+const toRateFormValue = (value: number) => {
+  return String(Math.round(value * 100000) / 1000);
+};
+
+const toRateInputValue = (value: string) => {
+  return Math.round(Number(value) * 1000) / 100000;
 };
 
 const toPenaltySettingsFormState = (settings: PenaltySettings): PenaltySettingsFormState => {

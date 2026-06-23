@@ -14,6 +14,8 @@ export interface CreateClientInput {
   department?: string;
   occupation?: string;
   monthlyIncome?: number;
+  isSpecial?: boolean;
+  specialInterestRate?: number | null;
   status?: ClientStatus;
   notes?: string;
 }
@@ -32,6 +34,8 @@ export interface ClientListItem {
   businessAddress: string | null;
   birthDate: string | null;
   activeCredits: number;
+  isSpecial: boolean;
+  specialInterestRate: number | null;
   totalDebt: number;
   status: ClientStatus;
 }

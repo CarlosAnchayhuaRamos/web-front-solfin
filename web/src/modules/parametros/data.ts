@@ -31,6 +31,7 @@ export const initialCreditPolicyForm: CreditPolicyFormState = {
     },
   },
   requireApprovalAboveLimit: true,
+  specialInterestRate: '10',
 };
 
 export const initialCashPolicyForm: CashPolicyFormState = {

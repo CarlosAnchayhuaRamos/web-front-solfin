@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { CreditStatus, CreditType, DocumentType, PaymentFrequency, PaymentMethod, PaymentStatus, StorageProvider, UserRole } from '@prisma/client';
+import { CreditStatus, CreditType, DocumentType, InterestCalculationMethod, PaymentFrequency, PaymentMethod, PaymentStatus, StorageProvider, UserRole } from '@prisma/client';
 import { normalizePenaltySettings } from '../parameters/parameters.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type { AssignCreditAdvisorInput, CreateCreditInput, CreditSimulationInput, CreditSimulationResult, DisburseCreditInput, PayInstallmentsInput } from './credits.types';
@@ -38,12 +38,18 @@ export class CreditsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async simulate(input: CreditSimulationInput): Promise<CreditSimulationResult> {
+    input.interestCalculationMethod = input.interestCalculationMethod ?? InterestCalculationMethod.CONTINUOUS;
     input.paymentFrequency = input.paymentFrequency ?? PaymentFrequency.MONTHLY;
     this.validateSimulationInput(input);
 
     const organization = await this.getOrganization();
     const product = await this.getProduct(organization.id, input.productType);
     const policy = await this.getCreditPolicy(organization.id);
+    const client = input.clientId
+      ? await this.prisma.client.findFirst({
+          where: { id: input.clientId, organizationId: organization.id },
+        })
+      : null;
 
     if (input.amount < Number(product.minAmount)) {
       throw new BadRequestException(`El monto minimo para ${product.name} es ${product.minAmount}`);
@@ -53,35 +59,16 @@ export class CreditsService {
       throw new BadRequestException(`El maximo de cuotas permitido es ${policy.maxInstallments}`);
     }
 
-    const monthlyInterestRate = Number(policy.defaultInterestRate);
-    const periodFactor = this.getPaymentFrequencyMonthFactor(input.paymentFrequency);
-    const totalMonths = input.installments * periodFactor;
-    const totalAmount = this.roundMoney(input.amount * Math.exp(monthlyInterestRate * totalMonths));
-    const totalInterest = totalAmount - input.amount;
+    const monthlyInterestRate = this.getCreditInterestRate(input, policy, client);
+    const installments = input.interestCalculationMethod === InterestCalculationMethod.EQUAL_INSTALLMENTS
+      ? this.getEqualInstallmentSchedule(input.amount, input.installments, input.paymentFrequency, monthlyInterestRate)
+      : this.getContinuousInterestSchedule(input.amount, input.installments, input.paymentFrequency, monthlyInterestRate);
+    const totalAmount = this.roundMoney(installments.reduce((total, installment) => total + installment.totalDue, 0));
     const installmentAmount = this.roundMoney(totalAmount / input.installments);
-    const principal = this.roundMoney(input.amount / input.installments);
-    const interest = this.roundMoney(totalInterest / input.installments);
-
-    const installments = Array.from({ length: input.installments }, (_, index) => {
-      const installmentNo = index + 1;
-      const dueDate = this.getDueDate(input.paymentFrequency, installmentNo);
-      const isLastInstallment = installmentNo === input.installments;
-      const previousPrincipal = principal * (input.installments - 1);
-      const previousInterest = interest * (input.installments - 1);
-      const installmentPrincipal = isLastInstallment ? this.roundMoney(input.amount - previousPrincipal) : principal;
-      const installmentInterest = isLastInstallment ? this.roundMoney(totalInterest - previousInterest) : interest;
-
-      return {
-        dueDate: dueDate.toISOString().slice(0, 10),
-        installmentNo,
-        interest: installmentInterest,
-        principal: installmentPrincipal,
-        totalDue: this.roundMoney(installmentPrincipal + installmentInterest),
-      };
-    });
 
     return {
       amount: input.amount,
+      interestCalculationMethod: input.interestCalculationMethod,
       installmentAmount,
       installments,
       interestRate: monthlyInterestRate,
@@ -136,6 +123,7 @@ export class CreditsService {
         firstDueDate: new Date(`${simulation.installments[0].dueDate}T00:00:00.000Z`),
         installmentAmount: simulation.installmentAmount,
         installmentCount: input.installments,
+        interestCalculationMethod: input.interestCalculationMethod,
         interestRate: simulation.interestRate,
         organizationId: organization.id,
         paymentFrequency: input.paymentFrequency,
@@ -201,6 +189,7 @@ export class CreditsService {
         creditCode: credit.code,
         installmentAmount: Number(credit.installmentAmount),
         installmentCount: credit.installmentCount,
+        interestCalculationMethod: credit.interestCalculationMethod,
         interestRate: Number(credit.interestRate),
         paymentFrequency: credit.paymentFrequency,
         penaltyRate: penaltySetting.rate,
@@ -252,6 +241,7 @@ export class CreditsService {
         code: credit.code,
         id: credit.id,
         installmentAmount: Number(credit.installmentAmount),
+        interestCalculationMethod: credit.interestCalculationMethod,
         interestRate: Number(credit.interestRate),
         netValue,
         overdueAmount,
@@ -629,6 +619,7 @@ export class CreditsService {
         organizationId,
         penaltySettings: normalizePenaltySettings(null, 0.005, 2),
         requireApprovalAboveLimit: true,
+        specialInterestRate: 0.1,
       } as never,
       update: {},
       where: { organizationId },
@@ -664,6 +655,76 @@ export class CreditsService {
     if (!Object.values(PaymentFrequency).includes(input.paymentFrequency)) {
       throw new BadRequestException('La frecuencia de pago no es valida');
     }
+
+    if (!Object.values(InterestCalculationMethod).includes(input.interestCalculationMethod)) {
+      throw new BadRequestException('El tipo de interes no es valido');
+    }
+
+    if (input.interestRate != null && input.interestRate < 0) {
+      throw new BadRequestException('La tasa de interes no puede ser negativa');
+    }
+  }
+
+  private getCreditInterestRate(
+    input: CreditSimulationInput,
+    policy: { defaultInterestRate: unknown; specialInterestRate?: unknown },
+    client: { isSpecial: boolean; specialInterestRate: unknown | null } | null,
+  ) {
+    if (input.interestRate != null && Number.isFinite(input.interestRate)) return input.interestRate;
+    if (client?.isSpecial && client.specialInterestRate != null) return Number(client.specialInterestRate);
+    if (client?.isSpecial) return Number(policy.specialInterestRate ?? policy.defaultInterestRate);
+    return Number(policy.defaultInterestRate);
+  }
+
+  private getContinuousInterestSchedule(amount: number, installments: number, paymentFrequency: PaymentFrequency, monthlyInterestRate: number) {
+    const periodFactor = this.getPaymentFrequencyMonthFactor(paymentFrequency);
+    const totalMonths = installments * periodFactor;
+    const totalAmount = this.roundMoney(amount * Math.exp(monthlyInterestRate * totalMonths));
+    const totalInterest = totalAmount - amount;
+    const principal = this.roundMoney(amount / installments);
+    const interest = this.roundMoney(totalInterest / installments);
+
+    return Array.from({ length: installments }, (_, index) => {
+      const installmentNo = index + 1;
+      const isLastInstallment = installmentNo === installments;
+      const previousPrincipal = principal * (installments - 1);
+      const previousInterest = interest * (installments - 1);
+      const installmentPrincipal = isLastInstallment ? this.roundMoney(amount - previousPrincipal) : principal;
+      const installmentInterest = isLastInstallment ? this.roundMoney(totalInterest - previousInterest) : interest;
+
+      return {
+        dueDate: this.getDueDate(paymentFrequency, installmentNo).toISOString().slice(0, 10),
+        installmentNo,
+        interest: installmentInterest,
+        principal: installmentPrincipal,
+        totalDue: this.roundMoney(installmentPrincipal + installmentInterest),
+      };
+    });
+  }
+
+  private getEqualInstallmentSchedule(amount: number, installments: number, paymentFrequency: PaymentFrequency, monthlyInterestRate: number) {
+    const periodRate = monthlyInterestRate * this.getPaymentFrequencyMonthFactor(paymentFrequency);
+    const installmentAmount = periodRate > 0
+      ? this.roundMoney(amount * (periodRate / (1 - Math.pow(1 + periodRate, -installments))))
+      : this.roundMoney(amount / installments);
+    let remainingPrincipal = amount;
+
+    return Array.from({ length: installments }, (_, index) => {
+      const installmentNo = index + 1;
+      const isLastInstallment = installmentNo === installments;
+      const interest = this.roundMoney(remainingPrincipal * periodRate);
+      const principal = isLastInstallment ? this.roundMoney(remainingPrincipal) : this.roundMoney(installmentAmount - interest);
+      const totalDue = isLastInstallment ? this.roundMoney(principal + interest) : installmentAmount;
+      remainingPrincipal = this.roundMoney(remainingPrincipal - principal);
+
+      return {
+        dueDate: this.getDueDate(paymentFrequency, installmentNo).toISOString().slice(0, 10),
+        installmentNo,
+        interest,
+        principal,
+        totalDue,
+      };
+    });
   }
 
   private calculatePenalty(

@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import { apiBaseUrl, apiFetch } from '../../common/api/client';
 import type { Client } from '../clientes/types';
 import type { CreditFormState, CreditSimulationResult, RegisteredCredit } from './types';
-import { getApiErrorMessage } from './lib';
+import { getApiErrorMessage, toRateInputValue } from './lib';
 
 export const useCreditClients = () => {
   const [clients, setClients] = useState<Client[] | null>(null);
@@ -44,6 +44,8 @@ export const useCreditRegistration = () => {
       clientId: form.clientId,
       fileNames: form.files.map((file) => file.name),
       installments: Number(form.installments),
+      interestCalculationMethod: form.interestCalculationMethod,
+      interestRate: form.interestRate.trim() ? toRateInputValue(form.interestRate) : undefined,
       notes: form.notes,
       paymentFrequency: form.paymentFrequency,
       productType: form.productType,
@@ -115,7 +117,9 @@ export const useCreditRegistration = () => {
 };
 
 export const useCreditPolicyParameters = () => {
+  const [defaultInterestRate, setDefaultInterestRate] = useState(0.12);
   const [maxRequestFiles, setMaxRequestFiles] = useState(5);
+  const [specialInterestRate, setSpecialInterestRate] = useState(0.1);
 
   const fetchCreditPolicyParameters = useCallback(async () => {
     try {
@@ -123,12 +127,16 @@ export const useCreditPolicyParameters = () => {
 
       if (!response.ok) return;
 
-      const data = (await response.json()) as { maxRequestFiles?: number };
+      const data = (await response.json()) as { defaultInterestRate?: number; maxRequestFiles?: number; specialInterestRate?: number };
+      setDefaultInterestRate(data.defaultInterestRate ?? 0.12);
       setMaxRequestFiles(data.maxRequestFiles ?? 5);
+      setSpecialInterestRate(data.specialInterestRate ?? 0.1);
     } catch {
+      setDefaultInterestRate(0.12);
       setMaxRequestFiles(5);
+      setSpecialInterestRate(0.1);
     }
   }, []);
 
-  return { fetchCreditPolicyParameters, maxRequestFiles };
+  return { defaultInterestRate, fetchCreditPolicyParameters, maxRequestFiles, specialInterestRate };
 };

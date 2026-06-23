@@ -88,10 +88,10 @@ export const ClientesView: React.FC = () => {
   const areSelectedCreditDocumentsReady = isCreditDocumentChecklistComplete(selectedCreditDocuments);
   const pendingCreditDocumentLabels = getPendingCreditDocumentLabels(selectedCreditDocuments);
 
-  const handleChange = (field: keyof ClientFormState, value: string) => {
+  const handleChange = (field: keyof ClientFormState, value: string | boolean) => {
     setForm((currentForm) => ({
       ...currentForm,
-      [field]: value,
+      [field]: typeof value === 'string' && field === 'specialInterestRate' ? limitDecimals(value, 3) : value,
     }));
   };
 
@@ -324,6 +324,29 @@ export const ClientesView: React.FC = () => {
                   ))}
                 </select>
               </div>
+              <label className="field field--checkbox" htmlFor="isSpecial">
+                <input
+                  checked={form.isSpecial}
+                  id="isSpecial"
+                  onChange={(event) => handleChange('isSpecial', event.target.checked)}
+                  type="checkbox"
+                />
+                Cliente especial
+              </label>
+              {form.isSpecial ? (
+                <div className="field">
+                  <label htmlFor="specialInterestRate">Tasa especial mensual (%)</label>
+                  <input
+                    id="specialInterestRate"
+                    min="0"
+                    onChange={(event) => handleChange('specialInterestRate', event.target.value)}
+                    placeholder="Usar tasa especial global"
+                    step="0.001"
+                    type="number"
+                    value={form.specialInterestRate}
+                  />
+                </div>
+              ) : null}
               <div className="actions">
                 <Button disabled={isCreating || isUpdating} type="submit">
                   {getSubmitLabel()}
@@ -372,7 +395,9 @@ export const ClientesView: React.FC = () => {
                 <td>{client.businessAddress ?? '-'}</td>
                 <td className="money">{formatMoney(client.totalDebt)}</td>
                 <td>
-                  <Badge color={getClientRiskColor(client)}>{getClientRiskLabel(client)}</Badge>
+                  <Badge color={client.isSpecial ? 'yellow' : getClientRiskColor(client)}>
+                    {client.isSpecial ? 'Especial' : getClientRiskLabel(client)}
+                  </Badge>
                 </td>
               </tr>
             ))}
@@ -618,6 +643,7 @@ const toCreditContractData = (client: Client, credit: ClientCredit): CreditContr
   creditCode: credit.code,
   installmentAmount: credit.installmentAmount,
   installmentCount: credit.schedules.length,
+  interestCalculationMethod: credit.interestCalculationMethod,
   interestRate: credit.interestRate,
   paymentFrequency: credit.paymentFrequency,
   penaltyRate: credit.penaltyRate,
@@ -631,6 +657,13 @@ const toCreditContractData = (client: Client, credit: ClientCredit): CreditContr
   })),
   totalAmount: credit.totalAmount,
 });
+
+const limitDecimals = (value: string, decimals: number) => {
+  const [integerPart, decimalPart] = value.split('.');
+
+  if (decimalPart === undefined) return value;
+  return `${integerPart}.${decimalPart.slice(0, decimals)}`;
+};
 
 const printVoucher = (voucher: PaymentVoucher) => {
   const printWindow = window.open('', '_blank', 'width=960,height=680');

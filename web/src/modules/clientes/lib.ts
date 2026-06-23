@@ -32,12 +32,23 @@ export const toClientFormState = (client: Client): ClientFormState => {
     dni: client.dni,
     email: client.email ?? '',
     firstName: client.firstName,
+    isSpecial: client.isSpecial,
     lastName: client.lastName,
     phone: client.phone,
     personalAddress: client.personalAddress ?? '',
     businessAddress: client.businessAddress ?? '',
     birthDate: client.birthDate ?? '',
+    specialInterestRate: client.specialInterestRate == null ? '' : toRateFormValue(client.specialInterestRate),
     status: client.status,
+  };
+};
+
+export const toClientPayload = (form: ClientFormState) => {
+  return {
+    ...form,
+    specialInterestRate: form.isSpecial && form.specialInterestRate.trim()
+      ? toRateInputValue(form.specialInterestRate)
+      : null,
   };
 };
 
@@ -75,4 +86,12 @@ export const getPendingCreditDocumentLabels = (checklist: CreditDocumentChecklis
   if (!checklist.disbursementRequest) labels.push('solicitud de desembolso');
 
   return labels.join(', ');
+};
+
+const toRateFormValue = (value: number) => {
+  return String(Math.round(value * 100000) / 1000);
+};
+
+const toRateInputValue = (value: string) => {
+  return Math.round(Number(value) * 1000) / 100000;
 };

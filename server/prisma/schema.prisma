@@ -60,6 +60,11 @@ enum PaymentFrequency {
   MONTHLY
 }
 
+enum InterestCalculationMethod {
+  CONTINUOUS
+  EQUAL_INSTALLMENTS
+}
+
 enum PaymentMethod {
   CASH
   TRANSFER
@@ -184,25 +189,27 @@ model AppUser {
 }
 
 model Client {
-  id              String       @id @default(uuid()) @db.Uuid
-  organizationId  String       @db.Uuid
-  firstName       String
-  lastName        String
-  dni             String
-  phone           String
-  email           String?
-  personalAddress String?
-  businessAddress String?
-  birthDate       DateTime?
-  district        String?
-  province        String?
-  department      String?
-  occupation      String?
-  monthlyIncome   Decimal?     @db.Decimal(14, 2)
-  status          ClientStatus @default(ACTIVE)
-  notes           String?
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  id                  String       @id @default(uuid()) @db.Uuid
+  organizationId      String       @db.Uuid
+  firstName           String
+  lastName            String
+  dni                 String
+  phone               String
+  email               String?
+  personalAddress     String?
+  businessAddress     String?
+  birthDate           DateTime?
+  district            String?
+  province            String?
+  department          String?
+  occupation          String?
+  monthlyIncome       Decimal?     @db.Decimal(14, 2)
+  isSpecial           Boolean      @default(false)
+  specialInterestRate Decimal?     @db.Decimal(9, 5)
+  status              ClientStatus @default(ACTIVE)
+  notes               String?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   credits      Credit[]
@@ -238,27 +245,28 @@ model CreditProduct {
 }
 
 model Credit {
-  id                String       @id @default(uuid()) @db.Uuid
-  organizationId    String       @db.Uuid
-  clientId          String       @db.Uuid
-  productId         String       @db.Uuid
-  analystId         String
-  approvedById      String?
-  code              String
-  type              CreditType
-  status            CreditStatus @default(DRAFT)
-  principalAmount   Decimal      @db.Decimal(14, 2)
-  interestRate      Decimal      @db.Decimal(8, 4)
-  installmentCount  Int
-  installmentAmount Decimal      @db.Decimal(14, 2)
-  paymentFrequency  PaymentFrequency @default(MONTHLY)
-  totalAmount       Decimal      @db.Decimal(14, 2)
-  disbursedAt       DateTime?
-  firstDueDate      DateTime?
-  closedAt          DateTime?
-  rejectionReason   String?
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
+  id                        String                    @id @default(uuid()) @db.Uuid
+  organizationId            String                    @db.Uuid
+  clientId                  String                    @db.Uuid
+  productId                 String                    @db.Uuid
+  analystId                 String
+  approvedById              String?
+  code                      String
+  type                      CreditType
+  status                    CreditStatus              @default(DRAFT)
+  principalAmount           Decimal                   @db.Decimal(14, 2)
+  interestRate              Decimal                   @db.Decimal(9, 5)
+  interestCalculationMethod InterestCalculationMethod @default(CONTINUOUS)
+  installmentCount          Int
+  installmentAmount         Decimal                   @db.Decimal(14, 2)
+  paymentFrequency          PaymentFrequency          @default(MONTHLY)
+  totalAmount               Decimal                   @db.Decimal(14, 2)
+  disbursedAt               DateTime?
+  firstDueDate              DateTime?
+  closedAt                  DateTime?
+  rejectionReason           String?
+  createdAt                 DateTime                  @default(now())
+  updatedAt                 DateTime                  @updatedAt
 
   organization    Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   client          Client                @relation(fields: [clientId], references: [id], onDelete: Restrict)
@@ -413,7 +421,8 @@ model CreditPolicy {
   maxAnalystApprovalAmount  Decimal  @db.Decimal(14, 2)
   maxInstallments           Int
   maxRequestFiles           Int      @default(5)
-  defaultInterestRate       Decimal  @default(0.12) @db.Decimal(8, 4)
+  defaultInterestRate       Decimal  @default(0.12) @db.Decimal(9, 5)
+  specialInterestRate       Decimal  @default(0.1) @db.Decimal(9, 5)
   defaultPenaltyRate        Decimal  @db.Decimal(8, 4)
   penaltySettings           Json     @default("{}")
   graceDays                 Int      @default(0)

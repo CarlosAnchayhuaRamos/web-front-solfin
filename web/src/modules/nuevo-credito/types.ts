@@ -8,6 +8,7 @@ export interface CreditProductOption {
 
 export type CreditProductType = 'EXPRESS' | 'GARANTIA';
 export type PaymentFrequency = 'DAILY' | 'WEEKLY' | 'MONTHLY';
+export type InterestCalculationMethod = 'CONTINUOUS' | 'EQUAL_INSTALLMENTS';
 
 export interface CreditFormState {
   amount: string;
@@ -15,6 +16,8 @@ export interface CreditFormState {
   clientSearch: string;
   files: File[];
   installments: string;
+  interestCalculationMethod: InterestCalculationMethod;
+  interestRate: string;
   notes: string;
   paymentFrequency: PaymentFrequency;
   productType: CreditProductType;
@@ -30,6 +33,7 @@ export interface PaymentScheduleItem {
 
 export interface CreditSimulationResult {
   amount: number;
+  interestCalculationMethod: InterestCalculationMethod;
   interestRate: number;
   installmentAmount: number;
   installments: PaymentScheduleItem[];
@@ -55,6 +59,7 @@ export interface RegisteredCredit {
   code: string;
   contract: RegisteredCreditContract | null;
   installmentAmount: number;
+  interestCalculationMethod: InterestCalculationMethod;
   interestRate: number;
   paymentFrequency: PaymentFrequency;
   principalAmount: number;
@@ -73,6 +78,7 @@ export interface RegisteredCreditContract {
   creditCode: string;
   installmentAmount: number;
   installmentCount: number;
+  interestCalculationMethod: InterestCalculationMethod;
   interestRate: number;
   paymentFrequency: PaymentFrequency;
   penaltyRate: number;

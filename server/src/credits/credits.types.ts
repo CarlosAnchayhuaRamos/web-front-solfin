@@ -1,7 +1,10 @@
-import { CreditType, PaymentFrequency } from '@prisma/client';
+import { CreditType, InterestCalculationMethod, PaymentFrequency } from '@prisma/client';
 
 export interface CreditSimulationInput {
   amount: number;
+  clientId?: string;
+  interestCalculationMethod: InterestCalculationMethod;
+  interestRate?: number;
   installments: number;
   paymentFrequency: PaymentFrequency;
   productType: CreditType;
@@ -28,6 +31,7 @@ export interface PaymentScheduleItem {
 export interface CreditSimulationResult {
   amount: number;
   interestRate: number;
+  interestCalculationMethod: InterestCalculationMethod;
   installmentAmount: number;
   installments: PaymentScheduleItem[];
   paymentFrequency: PaymentFrequency;

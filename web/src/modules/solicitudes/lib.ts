@@ -43,6 +43,7 @@ export const printCreditContract = (printWindow: Window, contract: CreditContrac
   const effectiveAnnualInterest = (Math.pow(1 + contract.interestRate, 12) - 1) * 100;
   const effectiveAnnualPenalty = (Math.pow(1 + contract.penaltyRate, 365) - 1) * 100;
   const paymentFrequencyLabel = getPaymentFrequencyLabel(contract.paymentFrequency);
+  const interestCalculationMethodLabel = getInterestCalculationMethodLabel(contract.interestCalculationMethod);
   const staticClauses = contractClauses.map(([title, body]) => `<h2>${title}</h2><p>${body}</p>`).join('');
 
   printWindow.document.open();
@@ -73,6 +74,7 @@ export const printCreditContract = (printWindow: Window, contract: CreditContrac
           <p><strong>Fecha:</strong> ${dateText}</p>
           <p><strong>Monto:</strong> ${amount}</p>
           <p><strong>Frecuencia:</strong> ${paymentFrequencyLabel}</p>
+          <p><strong>Tipo de interes:</strong> ${interestCalculationMethodLabel}</p>
           <p><strong>Cuota:</strong> ${formatContractMoney(contract.installmentAmount)}</p>
           <p><strong>Total:</strong> ${formatContractMoney(contract.totalAmount)}</p>
         </div>
@@ -80,7 +82,7 @@ export const printCreditContract = (printWindow: Window, contract: CreditContrac
         <h2>PRIMERO</h2>
         <p>LA EMPRESA, atendiendo a la solicitud de EL CLIENTE y a la información proporcionada por este, conviene en otorgarle un crédito ascendente a la suma de <strong>${amountWords}</strong> (${amount}), el mismo que será abonado a su cuenta _______________ en LA EMPRESA, a su entera conformidad, y se obliga a devolverlo en los términos pactados.</p>
         <h2>SEGUNDO</h2>
-        <p>El préstamo otorgado generará un interés compensatorio a la tasa efectiva anual de <strong>${effectiveAnnualInterest.toFixed(2)}%</strong> y un interés moratorio a la tasa efectiva anual de <strong>${effectiveAnnualPenalty.toFixed(2)}%</strong>; este último será aplicado adicionalmente sobre las cuotas no pagadas a su vencimiento, además de los gastos de cobranza administrativa y/o judicial.</p>
+        <p>El préstamo otorgado generará un interés compensatorio bajo modalidad <strong>${interestCalculationMethodLabel}</strong>, a la tasa efectiva anual de <strong>${effectiveAnnualInterest.toFixed(2)}%</strong> y un interés moratorio a la tasa efectiva anual de <strong>${effectiveAnnualPenalty.toFixed(2)}%</strong>; este último será aplicado adicionalmente sobre las cuotas no pagadas a su vencimiento, además de los gastos de cobranza administrativa y/o judicial.</p>
         <h2>TERCERO</h2>
         <p>EL CLIENTE se compromete a devolver el préstamo otorgado en <strong>${contract.installmentCount} cuotas</strong> de frecuencia <strong>${paymentFrequencyLabel}</strong>, establecidas en el cronograma de pagos entregado a EL CLIENTE, el cual se anexa al presente.</p>
         ${staticClauses}
@@ -154,6 +156,7 @@ export const printApprovedPaymentSchedule = (printWindow: Window, contract: Cred
           <p><strong>Credito:</strong> ${creditCode}</p>
           <p><strong>Cliente:</strong> ${clientName}</p>
           <p><strong>Monto:</strong> ${formatContractMoney(contract.principalAmount)}</p>
+          <p><strong>Tipo de interes:</strong> ${getInterestCalculationMethodLabel(contract.interestCalculationMethod)}</p>
           <p><strong>Frecuencia:</strong> ${getPaymentFrequencyLabel(contract.paymentFrequency)}</p>
         </section>
         <table>
@@ -268,4 +271,9 @@ const getPaymentFrequencyLabel = (paymentFrequency: CreditContractData['paymentF
   if (paymentFrequency === 'DAILY') return 'Diario';
   if (paymentFrequency === 'WEEKLY') return 'Semanal';
   return 'Mensual';
+};
+
+const getInterestCalculationMethodLabel = (method: CreditContractData['interestCalculationMethod']) => {
+  if (method === 'EQUAL_INSTALLMENTS') return 'Cuotas iguales';
+  return 'Continuo';
 };

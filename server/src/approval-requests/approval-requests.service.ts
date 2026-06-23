@@ -145,6 +145,7 @@ export class ApprovalRequestsService {
       creditCode: credit.code,
       installmentAmount: Number(credit.installmentAmount),
       installmentCount: credit.installmentCount,
+      interestCalculationMethod: credit.interestCalculationMethod,
       interestRate: Number(credit.interestRate),
       paymentFrequency: credit.paymentFrequency,
       penaltyRate: Number(policy?.defaultPenaltyRate ?? 0),

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { apiBaseUrl, apiFetch } from '../../common/api/client';
 import type { Client, ClientCredit, CreateClientInput, CreditAdvisor, CreditDisbursement, OpenCashSession, PaymentVoucher, UpdateClientInput } from './types';
-import { getApiErrorMessage } from './lib';
+import { getApiErrorMessage, toClientPayload } from './lib';
 
 export const useClients = () => {
   const [clients, setClients] = useState<Client[] | null>(null);
@@ -54,7 +54,7 @@ export const useClients = () => {
 
       try {
         const response = await apiFetch(`${apiBaseUrl}/clients`, {
-          body: JSON.stringify(input),
+          body: JSON.stringify(toClientPayload(input)),
           headers: { 'Content-Type': 'application/json' },
           method: 'POST',
         });
@@ -83,7 +83,7 @@ export const useClients = () => {
 
       try {
         const response = await apiFetch(`${apiBaseUrl}/clients/${id}`, {
-          body: JSON.stringify(input),
+          body: JSON.stringify(toClientPayload(input)),
           headers: { 'Content-Type': 'application/json' },
           method: 'PUT',
         });

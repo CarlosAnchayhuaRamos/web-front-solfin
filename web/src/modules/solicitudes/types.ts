@@ -1,5 +1,6 @@
 export type CreditStatusColor = 'blue' | 'yellow' | 'red' | 'gray' | 'black';
 export type PaymentFrequency = 'DAILY' | 'WEEKLY' | 'MONTHLY';
+export type InterestCalculationMethod = 'CONTINUOUS' | 'EQUAL_INSTALLMENTS';
 
 export interface CreditStatusInfo {
   label: string;
@@ -45,6 +46,7 @@ export interface CreditContractData {
   creditCode: string;
   installmentAmount: number;
   installmentCount: number;
+  interestCalculationMethod: InterestCalculationMethod;
   interestRate: number;
   paymentFrequency: PaymentFrequency;
   penaltyRate: number;

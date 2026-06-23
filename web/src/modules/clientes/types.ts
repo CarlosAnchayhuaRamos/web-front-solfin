@@ -9,6 +9,8 @@ export interface Client {
   personalAddress: string | null;
   businessAddress: string | null;
   birthDate: string | null;
+  isSpecial: boolean;
+  specialInterestRate: number | null;
   activeCredits: number;
   totalDebt: number;
   status: ClientStatus;
@@ -16,6 +18,7 @@ export interface Client {
 
 export type ClientStatus = 'ACTIVE' | 'WATCHLIST' | 'BLOCKED' | 'INACTIVE';
 export type PaymentFrequency = 'DAILY' | 'WEEKLY' | 'MONTHLY';
+export type InterestCalculationMethod = 'CONTINUOUS' | 'EQUAL_INSTALLMENTS';
 
 export interface CreateClientInput {
   firstName: string;
@@ -26,6 +29,8 @@ export interface CreateClientInput {
   personalAddress: string;
   businessAddress: string;
   birthDate: string;
+  isSpecial: boolean;
+  specialInterestRate: string;
   status: ClientStatus;
 }
 
@@ -66,6 +71,7 @@ export interface ClientCredit {
   code: string;
   id: string;
   installmentAmount: number;
+  interestCalculationMethod: InterestCalculationMethod;
   interestRate: number;
   netValue: number;
   overdueAmount: number;

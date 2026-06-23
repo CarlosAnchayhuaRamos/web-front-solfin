@@ -16,6 +16,8 @@ export const initialClientForm: ClientFormState = {
   personalAddress: '',
   businessAddress: '',
   birthDate: '',
+  isSpecial: false,
+  specialInterestRate: '',
   status: 'ACTIVE',
 };
 

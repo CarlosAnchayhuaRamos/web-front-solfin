@@ -1,4 +1,4 @@
-import { ApprovalStatus, PaymentFrequency } from '@prisma/client';
+import { ApprovalStatus, InterestCalculationMethod, PaymentFrequency } from '@prisma/client';
 
 export interface ApprovalRequestListItem {
   id: string;
@@ -37,6 +37,7 @@ export interface CreditContractData {
   creditCode: string;
   installmentAmount: number;
   installmentCount: number;
+  interestCalculationMethod: InterestCalculationMethod;
   interestRate: number;
   paymentFrequency: PaymentFrequency;
   penaltyRate: number;

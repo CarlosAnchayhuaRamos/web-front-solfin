@@ -16,6 +16,7 @@ const defaultCreditPolicy = {
   maxInstallments: 12,
   maxRequestFiles: 5,
   requireApprovalAboveLimit: true,
+  specialInterestRate: 0.1,
 };
 
 export const defaultPenaltySettings: PenaltySettings = {
@@ -131,6 +132,7 @@ export class ParametersService {
     maxRequestFiles?: number;
     penaltySettings?: unknown;
     requireApprovalAboveLimit: boolean;
+    specialInterestRate?: unknown;
   }): CreditPolicyDto {
     return {
       defaultInterestRate: Number(policy.defaultInterestRate),
@@ -141,6 +143,7 @@ export class ParametersService {
       maxRequestFiles: policy.maxRequestFiles ?? defaultCreditPolicy.maxRequestFiles,
       penaltySettings: normalizePenaltySettings(policy.penaltySettings, Number(policy.defaultPenaltyRate), policy.graceDays),
       requireApprovalAboveLimit: policy.requireApprovalAboveLimit,
+      specialInterestRate: Number(policy.specialInterestRate ?? defaultCreditPolicy.specialInterestRate),
     };
   }
 
@@ -163,6 +166,10 @@ export class ParametersService {
   private validateCreditPolicyInput(input: UpdateCreditPolicyInput) {
     if (input.defaultInterestRate < 0) {
       throw new BadRequestException('La tasa de interes no puede ser negativa');
+    }
+
+    if (input.specialInterestRate < 0) {
+      throw new BadRequestException('La tasa especial no puede ser negativa');
     }
 
     if (input.defaultPenaltyRate < 0) {

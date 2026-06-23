@@ -5,15 +5,15 @@ import { Card, CardBody, CardHeader } from '../../common/components/Card';
 import { formatMoney, formatPercentage } from '../../common/lib/format';
 import { escapePrintHtml, getPrintBrandMarkup, getPrintBrandStyles, printDocument } from '../../common/lib/print';
 import { PageHeader } from '../../common/layout/PageHeader';
-import { creditProductOptions, initialCreditForm, paymentFrequencyOptions } from './data';
+import { creditProductOptions, initialCreditForm, interestCalculationMethodOptions, paymentFrequencyOptions } from './data';
 import { useCreditClients, useCreditPolicyParameters, useCreditRegistration } from './hooks';
-import { filterCreditClients, getProductDescription } from './lib';
-import type { CreditFormState, CreditProductType, PaymentFrequency, RegisteredCredit } from './types';
+import { filterCreditClients, getClientInterestRate, getProductDescription, toRateFormValue } from './lib';
+import type { CreditFormState, CreditProductType, InterestCalculationMethod, PaymentFrequency, RegisteredCredit } from './types';
 
 export const NuevoCreditoView: React.FC = () => {
   const { clients, error: clientsError, fetchClients, isLoading } = useCreditClients();
   const { clearSimulation, error, isRegistering, isSimulating, registerCredit, simulateCredit, simulation } = useCreditRegistration();
-  const { fetchCreditPolicyParameters, maxRequestFiles } = useCreditPolicyParameters();
+  const { defaultInterestRate, fetchCreditPolicyParameters, maxRequestFiles, specialInterestRate } = useCreditPolicyParameters();
   const [form, setForm] = useState<CreditFormState>(initialCreditForm);
   const [isClientComboboxOpen, setIsClientComboboxOpen] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
@@ -27,6 +27,19 @@ export const NuevoCreditoView: React.FC = () => {
   const filteredClients = clients ? filterCreditClients(clients, form.clientSearch) : [];
   const selectedClient = clients?.find((client) => client.id === form.clientId) ?? null;
 
+  useEffect(() => {
+    setForm((currentForm) => {
+      if (currentForm.interestRate) return currentForm;
+
+      const client = clients?.find((currentClient) => currentClient.id === currentForm.clientId) ?? null;
+
+      return {
+        ...currentForm,
+        interestRate: toRateFormValue(getClientInterestRate(client, defaultInterestRate, specialInterestRate)),
+      };
+    });
+  }, [clients, defaultInterestRate, specialInterestRate]);
+
   const handleChange = (field: keyof CreditFormState, value: string) => {
     setSuccessMessage(null);
     setFileError(null);
@@ -39,7 +52,8 @@ export const NuevoCreditoView: React.FC = () => {
     setForm((currentForm) => ({
       ...currentForm,
       clientId: field === 'clientSearch' ? '' : currentForm.clientId,
-      [field]: value,
+      interestRate: field === 'clientSearch' ? toRateFormValue(defaultInterestRate) : currentForm.interestRate,
+      [field]: field === 'interestRate' ? limitDecimals(value, 3) : value,
     }));
   };
 
@@ -76,11 +90,15 @@ export const NuevoCreditoView: React.FC = () => {
   };
 
   const handleSelectClient = (clientId: string, clientLabel: string) => {
+    const client = clients?.find((currentClient) => currentClient.id === clientId) ?? null;
+    const interestRate = toRateFormValue(getClientInterestRate(client, defaultInterestRate, specialInterestRate));
+
     setIsClientComboboxOpen(false);
     setForm((currentForm) => ({
       ...currentForm,
       clientId,
       clientSearch: clientLabel,
+      interestRate,
     }));
   };
 
@@ -242,6 +260,33 @@ export const NuevoCreditoView: React.FC = () => {
                 </select>
               </div>
               <div className="field">
+                <label htmlFor="interestRate">Tasa interes mensual (%)</label>
+                <input
+                  id="interestRate"
+                  min="0"
+                  onChange={(event) => handleChange('interestRate', event.target.value)}
+                  placeholder={selectedClient?.isSpecial ? 'Interes especial' : 'Interes general'}
+                  step="0.001"
+                  type="number"
+                  value={form.interestRate}
+                />
+                <span>{selectedClient?.isSpecial ? 'Cliente especial' : 'Cliente general'}</span>
+              </div>
+              <div className="field">
+                <label htmlFor="interestCalculationMethod">Tipo de interes</label>
+                <select
+                  id="interestCalculationMethod"
+                  onChange={(event) => handleChange('interestCalculationMethod', event.target.value as InterestCalculationMethod)}
+                  value={form.interestCalculationMethod}
+                >
+                  {interestCalculationMethodOptions.map((method) => (
+                    <option key={method.id} value={method.id}>
+                      {method.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
                 <label htmlFor="notes">Observaciones</label>
                 <textarea id="notes" onChange={(event) => handleChange('notes', event.target.value)} value={form.notes} />
               </div>
@@ -280,6 +325,7 @@ export const NuevoCreditoView: React.FC = () => {
                   </div>
                   <Badge color="blue">{simulation.installments.length} cuotas</Badge>
                   <Badge color="gray">{getPaymentFrequencyLabel(simulation.paymentFrequency)}</Badge>
+                  <Badge color="gray">{getInterestCalculationMethodLabel(simulation.interestCalculationMethod)}</Badge>
                 </article>
               </div>
               <div className="table-wrap">
@@ -392,6 +438,7 @@ const printPaymentSchedule = (credit: RegisteredCredit) => {
         <div class="summary">
           <p><strong>Monto:</strong> ${formatMoney(credit.principalAmount)}</p>
           <p><strong>Tasa mensual:</strong> ${formatPercentage(credit.interestRate)}</p>
+          <p><strong>Tipo de interes:</strong> ${getInterestCalculationMethodLabel(credit.interestCalculationMethod)}</p>
           <p><strong>Frecuencia:</strong> ${getPaymentFrequencyLabel(credit.paymentFrequency)}</p>
           <p><strong>Cuota:</strong> ${formatMoney(credit.installmentAmount)}</p>
           <p class="total">Total: ${formatMoney(credit.totalAmount)}</p>
@@ -424,4 +471,16 @@ const getPaymentFrequencyLabel = (paymentFrequency: PaymentFrequency) => {
   if (paymentFrequency === 'DAILY') return 'Diario';
   if (paymentFrequency === 'WEEKLY') return 'Semanal';
   return 'Mensual';
+};
+
+const getInterestCalculationMethodLabel = (method: InterestCalculationMethod) => {
+  if (method === 'EQUAL_INSTALLMENTS') return 'Cuotas iguales';
+  return 'Continuo';
+};
+
+const limitDecimals = (value: string, decimals: number) => {
+  const [integerPart, decimalPart] = value.split('.');
+
+  if (decimalPart === undefined) return value;
+  return `${integerPart}.${decimalPart.slice(0, decimals)}`;
 };

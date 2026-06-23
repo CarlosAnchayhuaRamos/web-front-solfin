@@ -28,3 +28,18 @@ export const getApiErrorMessage = async (response: Response) => {
     return 'No se pudo completar la operacion';
   }
 };
+
+export const getClientInterestRate = (client: Client | null, defaultInterestRate: number, specialInterestRate: number) => {
+  if (!client) return defaultInterestRate;
+  if (client.isSpecial && client.specialInterestRate != null) return client.specialInterestRate;
+  if (client.isSpecial) return specialInterestRate;
+  return defaultInterestRate;
+};
+
+export const toRateFormValue = (value: number) => {
+  return String(Math.round(value * 100000) / 1000);
+};
+
+export const toRateInputValue = (value: string) => {
+  return Math.round(Number(value) * 1000) / 100000;
+};
