@@ -9,7 +9,7 @@
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
     "lint": "eslint \"src/**/*.ts\"",
-    "test": "jest"
+    "test": "jest --config jest.config.js --runInBand"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.15",

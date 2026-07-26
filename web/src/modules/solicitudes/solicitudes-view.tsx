@@ -6,7 +6,7 @@ import { formatDueDate, formatMoney } from '../../common/lib/format';
 import { PageHeader } from '../../common/layout/PageHeader';
 import { approvalStatusMap, approvalStatusOptions, initialApprovalFilters } from './data';
 import { useApprovalRequests } from './hooks';
-import { filterApprovalRequests, getPendingRequests } from './lib';
+import { filterApprovalRequests, getPendingRequests, normalizeDateInput } from './lib';
 import type { ApprovalRequestFilters } from './types';
 
 export const SolicitudesView: React.FC = () => {
@@ -91,8 +91,12 @@ export const SolicitudesView: React.FC = () => {
               <label htmlFor="requestDateFrom">Desde</label>
               <input
                 id="requestDateFrom"
-                onChange={(event) => handleFilterChange('dateFrom', event.target.value)}
-                type="date"
+                inputMode="numeric"
+                maxLength={10}
+                onChange={(event) => handleFilterChange('dateFrom', normalizeDateInput(event.target.value))}
+                pattern="\d{4}-\d{2}-\d{2}"
+                placeholder="YYYY-MM-DD"
+                type="text"
                 value={filters.dateFrom}
               />
             </div>
@@ -100,8 +104,12 @@ export const SolicitudesView: React.FC = () => {
               <label htmlFor="requestDateTo">Hasta</label>
               <input
                 id="requestDateTo"
-                onChange={(event) => handleFilterChange('dateTo', event.target.value)}
-                type="date"
+                inputMode="numeric"
+                maxLength={10}
+                onChange={(event) => handleFilterChange('dateTo', normalizeDateInput(event.target.value))}
+                pattern="\d{4}-\d{2}-\d{2}"
+                placeholder="YYYY-MM-DD"
+                type="text"
                 value={filters.dateTo}
               />
             </div>

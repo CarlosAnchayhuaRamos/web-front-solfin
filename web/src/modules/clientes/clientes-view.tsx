@@ -14,6 +14,7 @@ import {
   getCreditDocumentChecklist,
   getPendingCreditDocumentLabels,
   isCreditDocumentChecklistComplete,
+  normalizeDateInput,
   toClientFormState,
 } from './lib';
 import { printApprovedPaymentSchedule, printCreditContract, printDisbursementRequest } from '../solicitudes/lib';
@@ -300,7 +301,16 @@ export const ClientesView: React.FC = () => {
               </div>
               <div className="field">
                 <label htmlFor="birthDate">Fecha de nacimiento</label>
-                <input id="birthDate" onChange={(event) => handleChange('birthDate', event.target.value)} type="date" value={form.birthDate} />
+                <input
+                  id="birthDate"
+                  inputMode="numeric"
+                  maxLength={10}
+                  onChange={(event) => handleChange('birthDate', normalizeDateInput(event.target.value))}
+                  pattern="\d{4}-\d{2}-\d{2}"
+                  placeholder="YYYY-MM-DD"
+                  type="text"
+                  value={form.birthDate}
+                />
               </div>
               <div className="field">
                 <label htmlFor="email">Correo</label>

@@ -29,15 +29,17 @@ export const AperturaCierreView: React.FC = () => {
   const exceedsCashLimit = denominationTotal > maxCashBoxBalance;
   const isAdmin = user?.role === 'ADMIN';
   const isCashier = user?.role === 'CASHIER';
+  const canOperateCashBox = isAdmin || isCashier;
   const assignedCashBoxes = useMemo(() => {
     if (!user) return [];
+    if (isAdmin) return cash.boxes ?? [];
     return (cash.boxes ?? []).filter((box) => box.assignedCashierId === user.id);
-  }, [cash.boxes, user]);
+  }, [cash.boxes, isAdmin, user]);
   const selectedOpenSession = cash.sessions?.find((session) => session.cashBox === selectedCashBox && session.status === 'OPEN') ?? null;
   const isClosingMode = Boolean(selectedOpenSession);
   const closingDifference = selectedOpenSession ? denominationTotal - selectedOpenSession.expectedAmount : 0;
-  const canOpenCashBox = isCashier && selectedCashBox !== '' && cash.isVaultOpen && !isClosingMode && !exceedsCashLimit && !cash.isSaving;
-  const canCloseCashBox = isCashier && isClosingMode && Math.abs(closingDifference) <= maxCashDifference && !cash.isSaving;
+  const canOpenCashBox = canOperateCashBox && selectedCashBox !== '' && cash.isVaultOpen && !isClosingMode && !exceedsCashLimit && !cash.isSaving;
+  const canCloseCashBox = canOperateCashBox && isClosingMode && Math.abs(closingDifference) <= maxCashDifference && !cash.isSaving;
 
   useEffect(() => {
     if (!assignedCashBoxes.length) return;
@@ -308,7 +310,7 @@ export const AperturaCierreView: React.FC = () => {
           </>
         ) : null}
 
-        {isCashier ? (
+        {canOperateCashBox ? (
           <Card>
             <CardHeader
               description={isClosingMode ? 'Registra efectivo real por denominacion para cerrar caja.' : 'Registra unidades por denominacion para abrir caja.'}

@@ -30,6 +30,14 @@ export const getApiErrorMessage = async (response: Response) => {
   }
 };
 
+export const normalizeDateInput = (value: string) => {
+  const digits = value.replace(/\D/g, '').slice(0, 8);
+
+  if (digits.length <= 4) return digits;
+  if (digits.length <= 6) return `${digits.slice(0, 4)}-${digits.slice(4)}`;
+  return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6)}`;
+};
+
 export const printCreditContract = (printWindow: Window, contract: CreditContractData) => {
   const amount = formatContractMoney(contract.principalAmount);
   const amountWords = `${numberToSpanishWords(Math.floor(contract.principalAmount))} Y ${String(Math.round((contract.principalAmount % 1) * 100)).padStart(2, '0')}/100 SOLES`;

@@ -12,6 +12,8 @@
     "test:web": "npm --prefix web test",
     "start:server": "npm --prefix server run start:dev",
     "build:server": "npm --prefix server run build",
+    "test:server": "npm --prefix server run test",
+    "test:web": "npm --prefix web test -- --watchAll=false",
     "prisma:generate": "npm --prefix server run prisma:generate",
     "prisma:push": "npm --prefix server run prisma:push"
   }

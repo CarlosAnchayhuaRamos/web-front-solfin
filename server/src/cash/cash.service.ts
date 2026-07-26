@@ -329,7 +329,20 @@ export class CashService {
       throw new BadRequestException('La caja no existe');
     }
 
-    if (cashBox.assignedUserId !== input.userId) {
+    const responsible = await this.prisma.appUser.findFirst({
+      where: {
+        id: input.userId,
+        isActive: true,
+        organizationId: organization.id,
+        role: { in: ['ADMIN', 'CASHIER'] },
+      },
+    });
+
+    if (!responsible) {
+      throw new BadRequestException('Usuario de caja no autorizado');
+    }
+
+    if (responsible.role !== 'ADMIN' && cashBox.assignedUserId !== input.userId) {
       throw new BadRequestException('La caja no esta asignada al cajero');
     }
 
@@ -372,7 +385,7 @@ export class CashService {
       input.openingAmount,
       JSON.stringify(input.denominations),
       cashBox.name,
-      input.cashierName,
+      responsible.fullName,
     );
 
     return this.toSessionDto(sessions[0]);
