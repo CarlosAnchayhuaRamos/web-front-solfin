@@ -6,15 +6,17 @@ import { UserRole } from '@prisma/client';
 import type { Request } from 'express';
 import { IS_PUBLIC_KEY, ROLES_KEY } from './auth.constants';
 import type { AuthTokenPayload } from './auth.types';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class AuthGuard implements CanActivate {
   constructor(
     private readonly configService: ConfigService,
     private readonly reflector: Reflector,
+    private readonly prisma: PrismaService,
   ) {}
 
-  canActivate(context: ExecutionContext) {
+  async canActivate(context: ExecutionContext) {
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [context.getHandler(), context.getClass()]);
 
     if (isPublic) return true;
@@ -22,6 +24,9 @@ export class AuthGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<Request & { user?: AuthTokenPayload }>();
     const token = this.getBearerToken(request);
     const payload = this.verifyToken(token);
+    const user = await this.prisma.appUser.findUnique({ where: { id: payload.sub } });
+    if (!user?.isActive) throw new UnauthorizedException('Usuario inactivo o eliminado');
+    payload.role = user.role;
     const allowedRoles = this.reflector.getAllAndOverride<UserRole[]>(ROLES_KEY, [context.getHandler(), context.getClass()]);
 
     if (allowedRoles?.length && !allowedRoles.includes(payload.role)) {
@@ -59,7 +64,7 @@ export class AuthGuard implements CanActivate {
     try {
       const parsed = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as AuthTokenPayload;
 
-      if (!parsed.sub || !parsed.role || parsed.exp <= Math.floor(Date.now() / 1000)) {
+      if (typeof parsed.sub !== 'string' || !parsed.sub || !Number.isFinite(parsed.exp) || parsed.exp <= Math.floor(Date.now() / 1000)) {
         throw new UnauthorizedException('Token expirado');
       }
 

@@ -292,7 +292,7 @@ export const NuevoCreditoView: React.FC = () => {
               </div>
               <div className="field">
                 <label htmlFor="files">Archivos</label>
-                <input id="files" multiple onChange={(event) => handleFilesChange(event.target.files)} type="file" />
+                <input accept="application/pdf,image/jpeg,image/png" id="files" multiple onChange={(event) => handleFilesChange(event.target.files)} type="file" />
                 <span className={form.files.length > maxRequestFiles ? 'message--error' : undefined}>
                   {form.files.length} de {maxRequestFiles} archivos
                 </span>

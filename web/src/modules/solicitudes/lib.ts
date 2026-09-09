@@ -38,6 +38,14 @@ export const normalizeDateInput = (value: string) => {
   return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6)}`;
 };
 
+export const getPenaltyClause = (terms: CreditContractData['penaltyTerms']) => {
+  const grace = `Se aplican ${terms.graceDays} dias de gracia; se cobran solo los dias posteriores a la gracia.`;
+  if (terms.method === 'FIXED_DAILY') return `Mora fija de S/ ${terms.fixedDailyAmount.toFixed(2)} por dia y por cuota con saldo pendiente. ${grace}`;
+  const simple = `Mora simple de ${(terms.rate * 100).toFixed(3)}% diario sobre el saldo pendiente de la cuota, sin capitalizar mora.`;
+  if (terms.method === 'CAPPED_SIMPLE') return `${simple} Tope acumulado por cuota: ${(terms.capRate * 100).toFixed(3)}% del importe original de la cuota. ${grace}`;
+  return `${simple} ${grace}`;
+};
+
 export const printCreditContract = (printWindow: Window, contract: CreditContractData) => {
   const amount = formatContractMoney(contract.principalAmount);
   const amountWords = `${numberToSpanishWords(Math.floor(contract.principalAmount))} Y ${String(Math.round((contract.principalAmount % 1) * 100)).padStart(2, '0')}/100 SOLES`;
@@ -48,8 +56,7 @@ export const printCreditContract = (printWindow: Window, contract: CreditContrac
   const approvedByName = escapePrintHtml(contract.approvedByName);
   const approvedDate = new Date(contract.approvedAt);
   const dateText = new Intl.DateTimeFormat('es-PE', { day: 'numeric', month: 'long', year: 'numeric' }).format(approvedDate).toUpperCase();
-  const effectiveAnnualInterest = (Math.pow(1 + contract.interestRate, 12) - 1) * 100;
-  const effectiveAnnualPenalty = (Math.pow(1 + contract.penaltyRate, 365) - 1) * 100;
+  const penaltyClause = getPenaltyClause(contract.penaltyTerms);
   const paymentFrequencyLabel = getPaymentFrequencyLabel(contract.paymentFrequency);
   const interestCalculationMethodLabel = getInterestCalculationMethodLabel(contract.interestCalculationMethod);
   const staticClauses = contractClauses.map(([title, body]) => `<h2>${title}</h2><p>${body}</p>`).join('');
@@ -90,7 +97,7 @@ export const printCreditContract = (printWindow: Window, contract: CreditContrac
         <h2>PRIMERO</h2>
         <p>LA EMPRESA, atendiendo a la solicitud de EL CLIENTE y a la información proporcionada por este, conviene en otorgarle un crédito ascendente a la suma de <strong>${amountWords}</strong> (${amount}), el mismo que será abonado a su cuenta _______________ en LA EMPRESA, a su entera conformidad, y se obliga a devolverlo en los términos pactados.</p>
         <h2>SEGUNDO</h2>
-        <p>El préstamo otorgado generará un interés compensatorio bajo modalidad <strong>${interestCalculationMethodLabel}</strong>, a la tasa efectiva anual de <strong>${effectiveAnnualInterest.toFixed(2)}%</strong> y un interés moratorio a la tasa efectiva anual de <strong>${effectiveAnnualPenalty.toFixed(2)}%</strong>; este último será aplicado adicionalmente sobre las cuotas no pagadas a su vencimiento, además de los gastos de cobranza administrativa y/o judicial.</p>
+        <p>El préstamo otorgado generará un interés compensatorio bajo modalidad <strong>${interestCalculationMethodLabel}</strong>, con tasa de cálculo mensual de <strong>${(contract.interestRate * 100).toFixed(3)}%</strong>, conforme al cronograma anexo. ${penaltyClause}</p>
         <h2>TERCERO</h2>
         <p>EL CLIENTE se compromete a devolver el préstamo otorgado en <strong>${contract.installmentCount} cuotas</strong> de frecuencia <strong>${paymentFrequencyLabel}</strong>, establecidas en el cronograma de pagos entregado a EL CLIENTE, el cual se anexa al presente.</p>
         ${staticClauses}

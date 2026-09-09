@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { CurrentUser, Public, Roles } from '../auth/auth.decorators';
 import type { AuthTokenPayload } from '../auth/auth.types';
+import type { ConfirmCreditDocumentInput } from './credits.types';
 import { CreditsService } from './credits.service';
 import type { AssignCreditAdvisorInput, CreateCreditInput, CreditSimulationInput, DisburseCreditInput, PayInstallmentsInput } from './credits.types';
 
@@ -50,13 +51,25 @@ export class CreditsController {
 
   @Post(':creditId/pay-installments')
   @Roles(UserRole.ADMIN, UserRole.CASHIER)
-  payInstallments(@Param('creditId') creditId: string, @Body() input: PayInstallmentsInput) {
-    return this.creditsService.payInstallments(creditId, input);
+  payInstallments(@Param('creditId') creditId: string, @Body() input: PayInstallmentsInput, @CurrentUser() user: AuthTokenPayload) {
+    return this.creditsService.payInstallments(creditId, { ...input, userId: user.sub });
   }
 
   @Post(':creditId/disburse')
   @Roles(UserRole.ADMIN, UserRole.CASHIER)
-  disburse(@Param('creditId') creditId: string, @Body() input: DisburseCreditInput) {
-    return this.creditsService.disburse(creditId, input);
+  disburse(@Param('creditId') creditId: string, @Body() input: DisburseCreditInput, @CurrentUser() user: AuthTokenPayload) {
+    return this.creditsService.disburse(creditId, { ...input, userId: user.sub });
+  }
+
+  @Post(':creditId/prepare-documents')
+  @Roles(UserRole.ADMIN, UserRole.CASHIER)
+  prepareDocuments(@Param('creditId') creditId: string) {
+    return this.creditsService.prepareDocuments(creditId);
+  }
+
+  @Post(':creditId/confirm-document')
+  @Roles(UserRole.ADMIN, UserRole.CASHIER)
+  confirmDocument(@Param('creditId') creditId: string, @Body() input: ConfirmCreditDocumentInput) {
+    return this.creditsService.confirmDocument(creditId, input);
   }
 }

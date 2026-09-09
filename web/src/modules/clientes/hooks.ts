@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiBaseUrl, apiFetch } from '../../common/api/client';
-import type { Client, ClientCredit, CreateClientInput, CreditAdvisor, CreditDisbursement, OpenCashSession, PaymentVoucher, UpdateClientInput } from './types';
+import type { Client, ClientCredit, CreateClientInput, CreditAdvisor, CreditDisbursement, CreditDocumentChecklist, CreditDocumentType, OpenCashSession, PaymentVoucher, UpdateClientInput } from './types';
 import { getApiErrorMessage, toClientPayload } from './lib';
+import type { PendingPaymentRequest } from './types';
 
 export const useClients = () => {
   const [clients, setClients] = useState<Client[] | null>(null);
@@ -123,6 +124,7 @@ export const useClients = () => {
 };
 
 export const useClientCredits = (canAssignAdvisor: boolean, canUseCashSessions: boolean) => {
+  const paymentInFlight = useRef(false);
   const [advisors, setAdvisors] = useState<CreditAdvisor[] | null>(null);
   const [credits, setCredits] = useState<ClientCredit[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -133,6 +135,29 @@ export const useClientCredits = (canAssignAdvisor: boolean, canUseCashSessions: 
   const [openCashSessions, setOpenCashSessions] = useState<OpenCashSession[] | null>(null);
   const [disbursement, setDisbursement] = useState<CreditDisbursement | null>(null);
   const [voucher, setVoucher] = useState<PaymentVoucher | null>(null);
+
+  const prepareDocuments = useCallback(async (creditId: string): Promise<ClientCredit | null> => {
+    setError(null);
+    try {
+      const response = await apiFetch(`${apiBaseUrl}/credits/${creditId}/prepare-documents`, { method: 'POST' });
+      if (!response.ok) { setError(await getApiErrorMessage(response)); return null; }
+      const data = await response.json() as ClientCredit[];
+      setCredits(data);
+      return data.find((credit) => credit.id === creditId) ?? null;
+    } catch { setError('No se pudieron preparar los documentos'); return null; }
+  }, []);
+
+  const confirmDocument = useCallback(async (creditId: string, type: CreditDocumentType, date: string) => {
+    try {
+      const response = await apiFetch(`${apiBaseUrl}/credits/${creditId}/confirm-document`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type, date }),
+      });
+      if (!response.ok) { setError(await getApiErrorMessage(response)); return false; }
+      const generatedDocuments = await response.json() as CreditDocumentChecklist;
+      setCredits((current) => current?.map((credit) => credit.id === creditId ? { ...credit, generatedDocuments } : credit) ?? null);
+      return true;
+    } catch { setError('No se pudo registrar la generacion del documento'); return false; }
+  }, []);
 
   const fetchCredits = useCallback(async (clientId: string) => {
     setError(null);
@@ -210,22 +235,34 @@ export const useClientCredits = (canAssignAdvisor: boolean, canUseCashSessions: 
 
   const payInstallments = useCallback(
     async (creditId: string, amount: number, userId: string) => {
+      if (paymentInFlight.current) return false;
+      paymentInFlight.current = true;
       setError(null);
       setIsPaying(true);
 
       try {
+        const storageKey = `solfin-payment:${userId}:${creditId}`;
+        const saved = sessionStorage.getItem(storageKey);
+        const pending = saved ? JSON.parse(saved) as PendingPaymentRequest : { amount, requestId: crypto.randomUUID() };
+        if (pending.amount !== amount) {
+          setError(`Hay un pago de S/ ${pending.amount.toFixed(2)} sin confirmar. Reintente ese monto antes de registrar otro.`);
+          return false;
+        }
+        sessionStorage.setItem(storageKey, JSON.stringify(pending));
         const response = await apiFetch(`${apiBaseUrl}/credits/${creditId}/pay-installments`, {
-          body: JSON.stringify({ amount, userId }),
+          body: JSON.stringify({ amount, requestId: pending.requestId }),
           headers: { 'Content-Type': 'application/json' },
           method: 'POST',
         });
 
         if (!response.ok) {
+          if ([400, 401, 403, 404, 409].includes(response.status)) sessionStorage.removeItem(storageKey);
           setError(await getApiErrorMessage(response));
           return false;
         }
 
         const data = (await response.json()) as { credits: ClientCredit[]; voucher: PaymentVoucher };
+        sessionStorage.removeItem(storageKey);
         setCredits(data.credits);
         setVoucher(data.voucher);
         return data.voucher;
@@ -233,6 +270,7 @@ export const useClientCredits = (canAssignAdvisor: boolean, canUseCashSessions: 
         setError('No se pudo conectar con el backend');
         return false;
       } finally {
+        paymentInFlight.current = false;
         setIsPaying(false);
       }
     },
@@ -287,6 +325,8 @@ export const useClientCredits = (canAssignAdvisor: boolean, canUseCashSessions: 
     isPaying,
     openCashSessions,
     payInstallments,
+    prepareDocuments,
+    confirmDocument,
     voucher,
   };
 };

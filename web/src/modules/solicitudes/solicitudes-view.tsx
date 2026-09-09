@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useDocumentDownload } from '../../common/api/hooks/use-document-download';
 import { Badge } from '../../common/components/Badge';
 import { Button } from '../../common/components/Button';
 import { Card, CardBody, CardHeader } from '../../common/components/Card';
@@ -10,6 +11,7 @@ import { filterApprovalRequests, getPendingRequests, normalizeDateInput } from '
 import type { ApprovalRequestFilters } from './types';
 
 export const SolicitudesView: React.FC = () => {
+  const { downloadDocument, downloadError, downloadingId } = useDocumentDownload();
   const { error, isLoading, refetch, requests, reviewRequest, reviewingId } = useApprovalRequests();
   const [filters, setFilters] = useState<ApprovalRequestFilters>(initialApprovalFilters);
 
@@ -86,6 +88,7 @@ export const SolicitudesView: React.FC = () => {
       ) : null}
       <Card>
         <CardBody>
+          {downloadError ? <p className="message--error">{downloadError}</p> : null}
           <div className="form-grid">
             <div className="field">
               <label htmlFor="requestDateFrom">Desde</label>
@@ -174,10 +177,10 @@ export const SolicitudesView: React.FC = () => {
                         {request.files.length ? (
                           <div className="list">
                             {request.files.map((file) =>
-                              file.url ? (
-                                <a href={file.url} key={file.id} rel="noreferrer" target="_blank">
+                              file.sizeBytes > 0 ? (
+                                <Button disabled={downloadingId === file.id} onClick={() => void downloadDocument(file.id, file.fileName)} variant="outline" key={file.id}>
                                   {file.fileName}
-                                </a>
+                                </Button>
                               ) : (
                                 <span key={file.id}>{file.fileName}</span>
                               ),

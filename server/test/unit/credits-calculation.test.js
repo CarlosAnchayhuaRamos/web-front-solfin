@@ -1,4 +1,4 @@
-const { CreditsService } = require('../../dist/credits/credits.service');
+const { CreditsService } = require('../../src/credits/credits.service');
 
 const createService = () => new CreditsService({});
 

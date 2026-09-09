@@ -2,7 +2,6 @@ import { createHmac, pbkdf2Sync, timingSafeEqual } from 'crypto';
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
-import { BootstrapAdminService } from './bootstrap-admin.service';
 import type { AuthUserDto, LoginInput, LoginResponse } from './auth.types';
 
 @Injectable()
@@ -10,7 +9,6 @@ export class AuthService {
   constructor(
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
-    private readonly bootstrapAdminService: BootstrapAdminService,
   ) {}
 
   async login(input: LoginInput): Promise<LoginResponse> {
@@ -37,16 +35,7 @@ export class AuthService {
     const user = users[0];
 
     if (!user?.passwordHash || !this.verifyPassword(input.password, user.passwordHash)) {
-      const bootstrapUser = await this.bootstrapAdminService.authenticate(identifier, input.password);
-
-      if (!bootstrapUser) {
-        throw new UnauthorizedException('Credenciales invalidas');
-      }
-
-      return {
-        token: this.signToken(bootstrapUser),
-        user: bootstrapUser,
-      };
+      throw new UnauthorizedException('Credenciales invalidas');
     }
 
     const authUser = {

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useDocumentDownload } from '../../common/api/hooks/use-document-download';
 import { Badge } from '../../common/components/Badge';
 import { Button } from '../../common/components/Button';
 import { hasRole, useAuth } from '../../common/auth/AuthProvider';
@@ -11,7 +12,6 @@ import {
   filterClients,
   getClientRiskColor,
   getClientRiskLabel,
-  getCreditDocumentChecklist,
   getPendingCreditDocumentLabels,
   isCreditDocumentChecklistComplete,
   normalizeDateInput,
@@ -34,6 +34,7 @@ const emptyPaymentVoucher: PaymentVoucher = {
 };
 
 export const ClientesView: React.FC = () => {
+  const { downloadDocument, downloadError, downloadingId } = useDocumentDownload();
   const { user } = useAuth();
   const canAssignCreditAdvisor = hasRole(user, ['ADMIN']);
   const canUseCashSessions = hasRole(user, ['ADMIN', 'CASHIER']);
@@ -52,6 +53,8 @@ export const ClientesView: React.FC = () => {
     isPaying,
     openCashSessions,
     payInstallments,
+    prepareDocuments,
+    confirmDocument,
     voucher: paidVoucherPreview,
   } = useClientCredits(canAssignCreditAdvisor, canUseCashSessions);
   const voucher = paidVoucherPreview ?? emptyPaymentVoucher;
@@ -62,7 +65,7 @@ export const ClientesView: React.FC = () => {
   const [selectedCreditId, setSelectedCreditId] = useState<string | null>(null);
   const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
-  const [generatedDocumentsByCreditId, setGeneratedDocumentsByCreditId] = useState<Record<string, CreditDocumentChecklist>>({});
+  const [documentError, setDocumentError] = useState<string | null>(null);
   const isEditMode = Boolean(selectedClient);
 
   useEffect(() => {
@@ -85,7 +88,7 @@ export const ClientesView: React.FC = () => {
   const canPrintClientCreditDocuments = canUseCashSessions;
   const ownOpenCashSession = user ? openCashSessions?.find((session) => session.userId === user.id) ?? null : null;
   const isSelectedCreditDisbursed = selectedCredit?.status === 'ACTIVE' || selectedCredit?.status === 'OVERDUE';
-  const selectedCreditDocuments = getCreditDocumentChecklist(generatedDocumentsByCreditId, selectedCreditId);
+  const selectedCreditDocuments = selectedCredit?.generatedDocuments ?? initialCreditDocumentChecklist;
   const areSelectedCreditDocumentsReady = isCreditDocumentChecklistComplete(selectedCreditDocuments);
   const pendingCreditDocumentLabels = getPendingCreditDocumentLabels(selectedCreditDocuments);
 
@@ -145,27 +148,30 @@ export const ClientesView: React.FC = () => {
   const handleDisburseCredit = async (creditId: string) => {
     if (!canDisburseCredits) return;
     if (!user) return;
-    if (!isCreditDocumentChecklistComplete(getCreditDocumentChecklist(generatedDocumentsByCreditId, creditId))) return;
+    const credit = credits?.find((item) => item.id === creditId);
+    if (!credit || !isCreditDocumentChecklistComplete(credit.generatedDocuments)) return;
 
     await disburseCredit(creditId, user.id);
   };
 
-  const handlePrintApprovedDocument = (documentType: CreditDocumentType, printDocumentHandler: (printWindow: Window, contract: CreditContractData) => void) => {
+  const handlePrintApprovedDocument = async (documentType: CreditDocumentType, printDocumentHandler: (printWindow: Window, contract: CreditContractData) => void) => {
     if (!selectedClient) return;
     if (!selectedCredit) return;
     if (selectedCredit.status !== 'APPROVED') return;
 
     const printWindow = window.open('', '_blank', 'width=960,height=760');
 
-    if (!printWindow) return;
-    printDocumentHandler(printWindow, toCreditContractData(selectedClient, selectedCredit));
-    setGeneratedDocumentsByCreditId((currentDocuments) => ({
-      ...currentDocuments,
-      [selectedCredit.id]: {
-        ...(currentDocuments[selectedCredit.id] ?? initialCreditDocumentChecklist),
-        [documentType]: true,
-      },
-    }));
+    setDocumentError(null);
+    if (!printWindow) { setDocumentError('Permita ventanas emergentes para generar documentos'); return; }
+    try {
+      const prepared = await prepareDocuments(selectedCredit.id);
+      if (!prepared?.documentDate) { printWindow.close(); return; }
+      printDocumentHandler(printWindow, toCreditContractData(selectedClient, prepared));
+      await confirmDocument(prepared.id, documentType, prepared.documentDate);
+    } catch {
+      printWindow.close();
+      setDocumentError('No se pudo generar el documento');
+    }
   };
 
   const getSubmitLabel = () => {
@@ -430,6 +436,11 @@ export const ClientesView: React.FC = () => {
             </div>
             <div className="card__body">
               {creditsError ? <p className="message--error">{creditsError}</p> : null}
+              {documentError ? <p className="message--error">{documentError}</p> : null}
+              {downloadError ? <p className="message--error">{downloadError}</p> : null}
+              {selectedCredit?.files.map((file) => (
+                <Button key={file.id} disabled={!file.sizeBytes || downloadingId === file.id} variant="outline" onClick={() => void downloadDocument(file.id, file.fileName)}>{file.fileName}</Button>
+              ))}
               {disbursement ? (
                 <p>
                   Credito {disbursement.creditCode} desembolsado desde {disbursement.cashBox}: {formatMoney(disbursement.amount)}
@@ -454,7 +465,7 @@ export const ClientesView: React.FC = () => {
                     </thead>
                     <tbody>
                       {credits.map((credit) => {
-                        const creditDocuments = getCreditDocumentChecklist(generatedDocumentsByCreditId, credit.id);
+                        const creditDocuments = credit.generatedDocuments;
                         const areCreditDocumentsReady = isCreditDocumentChecklistComplete(creditDocuments);
 
                         return (
@@ -645,7 +656,7 @@ export const ClientesView: React.FC = () => {
 
 const toCreditContractData = (client: Client, credit: ClientCredit): CreditContractData => ({
   advisorName: credit.advisorName,
-  approvedAt: credit.approvedAt,
+  approvedAt: credit.documentDate ? `${credit.documentDate}T12:00:00-05:00` : credit.approvedAt,
   approvedByName: credit.approvedByName ?? credit.advisorName,
   clientAddress: client.personalAddress,
   clientDni: client.dni,
@@ -657,6 +668,7 @@ const toCreditContractData = (client: Client, credit: ClientCredit): CreditContr
   interestRate: credit.interestRate,
   paymentFrequency: credit.paymentFrequency,
   penaltyRate: credit.penaltyRate,
+  penaltyTerms: credit.penaltyTerms,
   principalAmount: credit.principalAmount,
   schedules: credit.schedules.map((schedule) => ({
     dueDate: schedule.dueDate,

@@ -42,7 +42,6 @@ export const useCreditRegistration = () => {
     return {
       amount: Number(form.amount),
       clientId: form.clientId,
-      fileNames: form.files.map((file) => file.name),
       installments: Number(form.installments),
       interestCalculationMethod: form.interestCalculationMethod,
       interestRate: form.interestRate.trim() ? toRateInputValue(form.interestRate) : undefined,
@@ -89,8 +88,17 @@ export const useCreditRegistration = () => {
     setIsRegistering(true);
 
     try {
+      const documentIds: string[] = [];
+      for (const file of form.files) {
+        const upload = new FormData();
+        upload.append('file', file);
+        const uploaded = await apiFetch(`${apiBaseUrl}/documents`, { method: 'POST', body: upload });
+        if (!uploaded.ok) { setError(await getApiErrorMessage(uploaded)); return null; }
+        const document = await uploaded.json() as { id: string };
+        documentIds.push(document.id);
+      }
       const response = await apiFetch(`${apiBaseUrl}/credits`, {
-        body: JSON.stringify(getPayload(form)),
+        body: JSON.stringify({ ...getPayload(form), documentIds }),
         headers: { 'Content-Type': 'application/json' },
         method: 'POST',
       });

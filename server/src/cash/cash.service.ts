@@ -396,55 +396,65 @@ export class CashService {
 
     const organization = await this.getOrganization();
     await this.ensureCashSetup(organization.id);
-    const expectedAmount = await this.getExpectedCashSessionAmount(id, organization.id);
     const maxCashDifference = await this.getMaxCashDifference(organization.id);
-    const difference = this.roundMoney(input.countedAmount - expectedAmount);
+    const session = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM cash_sessions WHERE id = ${id}::uuid FOR UPDATE`;
+      const openSession = await tx.cashSession.findFirst({ where: { id, status: 'OPEN', cashBox: { organizationId: organization.id } } });
+      if (!openSession) throw new BadRequestException('La caja abierta no existe');
+      const totals = await tx.cashMovement.groupBy({ by: ['direction'], where: { cashSessionId: id }, _sum: { amount: true } });
+      const expectedAmount = this.roundMoney(Number(openSession.openingAmount) + totals.reduce((total, row) => {
+        const amount = Number(row._sum.amount ?? 0);
+        return total + (row.direction === 'IN' ? amount : -amount);
+      }, 0));
+      const difference = this.roundMoney(input.countedAmount - expectedAmount);
 
-    if (Math.abs(difference) > maxCashDifference) {
-      throw new BadRequestException(`La diferencia supera el maximo permitido de S/ ${maxCashDifference}`);
-    }
+      if (Math.abs(difference) > maxCashDifference) {
+        throw new BadRequestException(`La diferencia supera el maximo permitido de S/ ${maxCashDifference}`);
+      }
 
-    const sessions = await this.prisma.$queryRawUnsafe<CashSessionRecord[]>(
-      `
-        UPDATE cash_sessions cs
-        SET status = 'CLOSED'::"CashSessionStatus",
-            "closedAt" = now(),
-            "expectedAmount" = $3,
-            "countedAmount" = $4,
-            difference = $5,
-            "closingDenominations" = $6::jsonb,
-            "updatedAt" = now()
-        FROM cash_boxes cb, app_users au
-        WHERE cs.id = $1::uuid
-          AND cs."cashBoxId" = cb.id
-          AND cs."userId" = au.id
-          AND cb."organizationId" = $2::uuid
-          AND cs.status = 'OPEN'::"CashSessionStatus"
-        RETURNING
-          cs.id,
-          cs."userId",
-          cb.name AS "cashBox",
-          au."fullName" AS cashier,
-          cs.status::text AS status,
-          cs."openingAmount",
-          cs."expectedAmount",
-          cs."countedAmount",
-          cs.difference,
-          cs.denominations,
-          cs."closingDenominations"
-      `,
-      id,
-      organization.id,
-      expectedAmount,
-      input.countedAmount,
-      difference,
-      JSON.stringify(input.denominations),
-    );
-    const session = sessions[0];
+      const sessions = await tx.$queryRawUnsafe<CashSessionRecord[]>(
+        `
+          UPDATE cash_sessions cs
+          SET status = 'CLOSED'::"CashSessionStatus",
+              "closedAt" = now(),
+              "expectedAmount" = $3,
+              "countedAmount" = $4,
+              difference = $5,
+              "closingDenominations" = $6::jsonb,
+              "updatedAt" = now()
+          FROM cash_boxes cb, app_users au
+          WHERE cs.id = $1::uuid
+            AND cs."cashBoxId" = cb.id
+            AND cs."userId" = au.id
+            AND cb."organizationId" = $2::uuid
+            AND cs.status = 'OPEN'::"CashSessionStatus"
+          RETURNING
+            cs.id,
+            cs."userId",
+            cb.name AS "cashBox",
+            au."fullName" AS cashier,
+            cs.status::text AS status,
+            cs."openingAmount",
+            cs."expectedAmount",
+            cs."countedAmount",
+            cs.difference,
+            cs.denominations,
+            cs."closingDenominations"
+        `,
+        id,
+        organization.id,
+        expectedAmount,
+        input.countedAmount,
+        difference,
+        JSON.stringify(input.denominations),
+      );
+      const session = sessions[0];
 
-    if (!session) {
-      throw new BadRequestException('La caja abierta no existe');
-    }
+      if (!session) {
+        throw new BadRequestException('La caja abierta no existe');
+      }
+      return session;
+    });
 
     const movements = await this.getCashMovementTotals(id);
     const movementDetails = await this.getCashMovementDetails(id);

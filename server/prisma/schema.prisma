@@ -265,6 +265,9 @@ model Credit {
   firstDueDate              DateTime?
   closedAt                  DateTime?
   rejectionReason           String?
+  penaltyTerms              Json?
+  documentDate              DateTime?                 @db.Date
+  generatedDocuments        Json                      @default("{}")
   createdAt                 DateTime                  @default(now())
   updatedAt                 DateTime                  @updatedAt
 
@@ -337,6 +340,8 @@ model PaymentSchedule {
   principal     Decimal       @db.Decimal(14, 2)
   interest      Decimal       @db.Decimal(14, 2)
   penalty       Decimal       @default(0) @db.Decimal(14, 2)
+  penaltyPaid   Decimal       @default(0) @db.Decimal(14, 2)
+  penaltyAccruedDays Int       @default(0)
   totalDue      Decimal       @db.Decimal(14, 2)
   paidAmount    Decimal       @default(0) @db.Decimal(14, 2)
   status        PaymentStatus @default(PENDING)
@@ -371,6 +376,17 @@ model Payment {
   @@index([creditId, paidAt])
   @@index([paymentScheduleId])
   @@map("payments")
+}
+
+model PaymentReceipt {
+  id        String   @id @db.Uuid
+  creditId  String   @db.Uuid
+  userId    String
+  amount    Decimal  @db.Decimal(14, 2)
+  voucher   Json
+  createdAt DateTime @default(now())
+
+  @@map("payment_receipts")
 }
 
 model CreditStatusHistory {

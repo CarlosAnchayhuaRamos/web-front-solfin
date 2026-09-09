@@ -14,9 +14,10 @@ import { ParametersModule } from './parameters/parameters.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ReportsModule } from './reports/reports.module';
 import { UsersModule } from './users/users.module';
+import { DocumentsModule } from './documents/documents.module';
 
 @Module({
-  imports: [ConfigModule.forRoot({ isGlobal: true }), PrismaModule, AuthModule, CashModule, ClientsModule, CreditsModule, DashboardModule, ApprovalRequestsModule, ParametersModule, ReportsModule, UsersModule],
+  imports: [ConfigModule.forRoot({ isGlobal: true }), PrismaModule, AuthModule, CashModule, ClientsModule, CreditsModule, DashboardModule, ApprovalRequestsModule, ParametersModule, ReportsModule, UsersModule, DocumentsModule],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: AuthGuard }],
 })

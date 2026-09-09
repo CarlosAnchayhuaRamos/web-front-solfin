@@ -1,7 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { CreditStatus, CreditType, DocumentType, InterestCalculationMethod, PaymentFrequency, PaymentMethod, PaymentStatus, StorageProvider, UserRole } from '@prisma/client';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { CreditStatus, CreditType, InterestCalculationMethod, PaymentFrequency, PaymentMethod, PaymentStatus, UserRole } from '@prisma/client';
 import { normalizePenaltySettings } from '../parameters/parameters.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { accruedPenalty, creditDueDate, documentChecklist, limaDate, penaltyDays, readPenaltyTerms } from './credits.lib';
+import type { ConfirmCreditDocumentInput, PenaltyScheduleState } from './credits.types';
 import type { AssignCreditAdvisorInput, CreateCreditInput, CreditSimulationInput, CreditSimulationResult, DisburseCreditInput, PayInstallmentsInput } from './credits.types';
 
 const demoOrganization = {
@@ -106,76 +108,77 @@ export class CreditsService {
     }
 
     const code = await this.nextCreditCode(organization.id);
-    const fileNames = this.getRequestFileNames(input.fileNames);
-
-    if (fileNames.length > (policy.maxRequestFiles ?? 5)) {
+    if (input.fileNames?.length) throw new BadRequestException('Suba los archivos antes de registrar el credito');
+    const documentIds = input.documentIds ?? [];
+    if (!Array.isArray(documentIds) || documentIds.some((id) => typeof id !== 'string') || new Set(documentIds).size !== documentIds.length) {
+      throw new BadRequestException('Adjuntos invalidos');
+    }
+    if (documentIds.length > (policy.maxRequestFiles ?? 5)) {
       throw new BadRequestException(`Maximo ${policy.maxRequestFiles ?? 5} archivos permitidos`);
     }
 
     const requiresAdminApproval = requester.role !== UserRole.ADMIN && input.amount > Number(requester.creditLimit);
+    const penaltySetting = normalizePenaltySettings(policy.penaltySettings, Number(policy.defaultPenaltyRate), policy.graceDays)[input.paymentFrequency];
 
-    const credit = await this.prisma.credit.create({
-      data: {
-        analystId: requester.id,
-        approvedById: requiresAdminApproval ? undefined : requester.id,
-        clientId: client.id,
-        code,
-        firstDueDate: new Date(`${simulation.installments[0].dueDate}T00:00:00.000Z`),
-        installmentAmount: simulation.installmentAmount,
-        installmentCount: input.installments,
-        interestCalculationMethod: input.interestCalculationMethod,
-        interestRate: simulation.interestRate,
-        organizationId: organization.id,
-        paymentFrequency: input.paymentFrequency,
-        principalAmount: input.amount,
-        productId: product.id,
-        schedules: {
-          create: simulation.installments.map((installment) => ({
-            dueDate: new Date(`${installment.dueDate}T00:00:00.000Z`),
-            installmentNo: installment.installmentNo,
-            interest: installment.interest,
-            principal: installment.principal,
-            totalDue: installment.totalDue,
-          })),
+    const credit = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.credit.create({
+        data: {
+          analystId: requester.id,
+          approvedById: requiresAdminApproval ? undefined : requester.id,
+          clientId: client.id,
+          code,
+          penaltyTerms: { ...penaltySetting },
+          firstDueDate: new Date(`${simulation.installments[0].dueDate}T00:00:00.000Z`),
+          installmentAmount: simulation.installmentAmount,
+          installmentCount: input.installments,
+          interestCalculationMethod: input.interestCalculationMethod,
+          interestRate: simulation.interestRate,
+          organizationId: organization.id,
+          paymentFrequency: input.paymentFrequency,
+          principalAmount: input.amount,
+          productId: product.id,
+          schedules: {
+            create: simulation.installments.map((installment) => ({
+              dueDate: new Date(`${installment.dueDate}T00:00:00.000Z`),
+              installmentNo: installment.installmentNo,
+              interest: installment.interest,
+              principal: installment.principal,
+              totalDue: installment.totalDue,
+            })),
+          },
+          approvalRequest: requiresAdminApproval
+            ? {
+                create: {
+                  analystLimit: requester.creditLimit,
+                  organizationId: organization.id,
+                  reason: input.notes?.trim() || 'Credito registrado para revision',
+                  requestedAmount: input.amount,
+                  requestedById: requester.id,
+                },
+              }
+            : undefined,
+          status: requiresAdminApproval ? CreditStatus.PENDING_APPROVAL : CreditStatus.APPROVED,
+          totalAmount: simulation.totalAmount,
+          type: input.productType,
         },
-        documents: {
-          create: fileNames.map((fileName) => ({
-            fileName,
-            mimeType: 'application/octet-stream',
-            organizationId: organization.id,
-            provider: StorageProvider.LOCAL,
-            sizeBytes: 0,
-            storageKey: `credit-requests/${code}/${fileName}`,
-            type: DocumentType.OTHER,
-            uploadedById: requester.id,
-          })),
+        include: {
+          approvalRequest: true,
+          client: true,
+          documents: true,
+          schedules: { orderBy: { installmentNo: 'asc' } },
         },
-        approvalRequest: requiresAdminApproval
-          ? {
-              create: {
-                analystLimit: requester.creditLimit,
-                organizationId: organization.id,
-                reason: input.notes?.trim() || 'Credito registrado para revision',
-                requestedAmount: input.amount,
-                requestedById: requester.id,
-              },
-            }
-          : undefined,
-        status: requiresAdminApproval ? CreditStatus.PENDING_APPROVAL : CreditStatus.APPROVED,
-        totalAmount: simulation.totalAmount,
-        type: input.productType,
-      },
-      include: {
-        approvalRequest: true,
-        client: true,
-        documents: true,
-        schedules: { orderBy: { installmentNo: 'asc' } },
-      },
+      });
+
+      const attached = await tx.document.updateMany({
+        where: { id: { in: documentIds }, organizationId: organization.id, uploadedById: requester.id, creditId: null, sizeBytes: { gt: 0 } },
+        data: { creditId: created.id, clientId: client.id },
+      });
+      if (attached.count !== documentIds.length) throw new BadRequestException('Uno o mas adjuntos no estan disponibles');
+      const documents = await tx.document.findMany({ where: { creditId: created.id } });
+      return { ...created, documents };
     });
 
     if (requiresAdminApproval) return { ...credit, contract: null };
-    const penaltySettings = normalizePenaltySettings(policy.penaltySettings, Number(policy.defaultPenaltyRate), policy.graceDays);
-    const penaltySetting = penaltySettings[input.paymentFrequency];
 
     return {
       ...credit,
@@ -193,6 +196,7 @@ export class CreditsService {
         interestRate: Number(credit.interestRate),
         paymentFrequency: credit.paymentFrequency,
         penaltyRate: penaltySetting.rate,
+        penaltyTerms: penaltySetting,
         principalAmount: Number(credit.principalAmount),
         schedules: credit.schedules.map((schedule) => ({
           dueDate: schedule.dueDate.toISOString(),
@@ -208,30 +212,31 @@ export class CreditsService {
 
   async findApprovedByClient(clientId: string) {
     const organization = await this.getOrganization();
-    const policy = await this.getCreditPolicy(organization.id);
-    const penaltySettings = normalizePenaltySettings(policy.penaltySettings, Number(policy.defaultPenaltyRate), policy.graceDays);
 
     const credits = await this.prisma.credit.findMany({
       include: {
         analyst: true,
         approvalRequest: true,
         approvedBy: true,
+        documents: { select: { id: true, fileName: true, sizeBytes: true } },
         schedules: { orderBy: { installmentNo: 'asc' } },
       },
       orderBy: { createdAt: 'desc' },
       where: {
         clientId,
         organizationId: organization.id,
-        status: { in: [CreditStatus.APPROVED, CreditStatus.ACTIVE, CreditStatus.OVERDUE] },
+        status: { in: [CreditStatus.APPROVED, CreditStatus.ACTIVE, CreditStatus.OVERDUE, CreditStatus.PAID] },
       },
     });
 
     return credits.map((credit) => {
+      const penaltySetting = readPenaltyTerms(credit.penaltyTerms);
+      const penaltySettings = { DAILY: penaltySetting, WEEKLY: penaltySetting, MONTHLY: penaltySetting };
       const netValue = Number(credit.totalAmount) - Number(credit.principalAmount);
       const overdueAmount = credit.schedules.reduce((total, schedule) => {
-        return total + this.calculatePenalty(schedule, credit.paymentFrequency, penaltySettings);
+        if (!credit.disbursedAt || schedule.status === PaymentStatus.PAID || schedule.status === PaymentStatus.CANCELED) return total;
+        return total + Math.max(0, this.calculatePenalty(schedule, credit.paymentFrequency, penaltySettings) - Number(schedule.penaltyPaid));
       }, 0);
-      const penaltySetting = penaltySettings[credit.paymentFrequency];
 
       return {
         advisorId: credit.analyst.id,
@@ -240,6 +245,9 @@ export class CreditsService {
         approvedByName: credit.approvedBy?.fullName ?? null,
         code: credit.code,
         id: credit.id,
+        documentDate: credit.documentDate?.toISOString().slice(0, 10) ?? null,
+        generatedDocuments: credit.documentDate?.getTime() === limaDate().getTime() ? documentChecklist(credit.generatedDocuments) : documentChecklist(null),
+        files: credit.documents,
         installmentAmount: Number(credit.installmentAmount),
         interestCalculationMethod: credit.interestCalculationMethod,
         interestRate: Number(credit.interestRate),
@@ -247,6 +255,7 @@ export class CreditsService {
         overdueAmount,
         paymentFrequency: credit.paymentFrequency,
         penaltyRate: penaltySetting.rate,
+        penaltyTerms: penaltySetting,
         principalAmount: Number(credit.principalAmount),
         schedules: credit.schedules.map((schedule) => ({
           dueDate: schedule.dueDate.toISOString().slice(0, 10),
@@ -254,9 +263,9 @@ export class CreditsService {
           installmentNo: schedule.installmentNo,
           interest: Number(schedule.interest),
           paidAmount: Number(schedule.paidAmount),
-          penalty: this.calculatePenalty(schedule, credit.paymentFrequency, penaltySettings),
+          penalty: credit.disbursedAt ? this.calculatePenalty(schedule, credit.paymentFrequency, penaltySettings) : 0,
           principal: Number(schedule.principal),
-          status: this.getScheduleStatus(schedule),
+          status: credit.disbursedAt ? this.getScheduleStatus(schedule) : schedule.status,
           totalDue: Number(schedule.totalDue),
         })),
         status: credit.status,
@@ -307,7 +316,7 @@ export class CreditsService {
     }
 
     await this.prisma.credit.update({
-      data: { analystId: advisor.id },
+      data: { analystId: advisor.id, generatedDocuments: {} },
       where: { id: credit.id },
     });
 
@@ -324,56 +333,73 @@ export class CreditsService {
     if (!input.userId?.trim()) {
       throw new BadRequestException('El cajero es obligatorio');
     }
+    if (typeof input.requestId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId)) {
+      throw new BadRequestException('Se requiere un identificador unico de pago');
+    }
 
     const organization = await this.getOrganization();
-    const credit = await this.prisma.credit.findFirst({
-      include: { client: true },
-      where: { id: creditId, organizationId: organization.id },
-    });
+    const result = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM credits WHERE id = ${creditId}::uuid FOR UPDATE`;
+      const credit = await tx.credit.findFirst({
+        include: { client: true },
+        where: { id: creditId, organizationId: organization.id },
+      });
 
-    if (!credit) {
-      throw new NotFoundException('Credito no encontrado');
-    }
+      if (!credit) {
+        throw new NotFoundException('Credito no encontrado');
+      }
+      const receipt = await tx.paymentReceipt.findUnique({ where: { id: input.requestId } });
+      if (receipt) {
+        if (receipt.creditId !== creditId || receipt.userId !== input.userId || Number(receipt.amount) !== paymentAmount) {
+          throw new ConflictException('Identificador de pago ya usado para otra operacion');
+        }
+        return { clientId: credit.clientId, voucher: receipt.voucher };
+      }
 
-    if (credit.status !== CreditStatus.ACTIVE && credit.status !== CreditStatus.OVERDUE) {
-      throw new BadRequestException('El credito debe estar desembolsado para registrar pagos');
-    }
+      if (credit.status !== CreditStatus.ACTIVE && credit.status !== CreditStatus.OVERDUE) {
+        throw new BadRequestException('El credito debe estar desembolsado para registrar pagos');
+      }
 
-    const schedules = await this.prisma.paymentSchedule.findMany({
-      orderBy: { installmentNo: 'asc' },
-      where: {
-        creditId,
-        status: { in: [PaymentStatus.PENDING, PaymentStatus.PARTIAL, PaymentStatus.OVERDUE] },
-      },
-    });
+      const schedules = await tx.paymentSchedule.findMany({
+        orderBy: { installmentNo: 'asc' },
+        where: {
+          creditId,
+          status: { in: [PaymentStatus.PENDING, PaymentStatus.PARTIAL, PaymentStatus.OVERDUE] },
+        },
+      });
 
-    if (!schedules.length) {
-      throw new BadRequestException('No hay cuotas pendientes');
-    }
+      if (!schedules.length) {
+        throw new BadRequestException('No hay cuotas pendientes');
+      }
 
-    const policy = await this.getCreditPolicy(organization.id);
-    const penaltySettings = normalizePenaltySettings(policy.penaltySettings, Number(policy.defaultPenaltyRate), policy.graceDays);
-    const cashSession = await this.findOpenCashSession(organization.id, input.userId);
+      const terms = readPenaltyTerms(credit.penaltyTerms);
+      const penaltySettings = { DAILY: terms, WEEKLY: terms, MONTHLY: terms };
+      const cashSession = await tx.cashSession.findFirst({
+        include: { user: true }, orderBy: { openedAt: 'desc' },
+        where: { cashBox: { organizationId: organization.id }, status: 'OPEN', userId: input.userId },
+      });
 
-    if (!cashSession) {
-      throw new BadRequestException('Debe tener una caja abierta para registrar pagos');
-    }
+      if (!cashSession) {
+        throw new BadRequestException('Debe tener una caja abierta para registrar pagos');
+      }
+      await tx.$queryRaw`SELECT id FROM cash_sessions WHERE id = ${cashSession.id}::uuid FOR UPDATE`;
+      const lockedSession = await tx.cashSession.findUnique({ where: { id: cashSession.id } });
+      if (lockedSession?.status !== 'OPEN') throw new ConflictException('La caja ya fue cerrada');
 
-    const totalPending = this.roundMoney(
-      schedules.reduce((total, schedule) => {
-        const penalty = this.calculatePenalty(schedule, credit.paymentFrequency, penaltySettings);
-        return total + Number(schedule.totalDue) + penalty - Number(schedule.paidAmount);
-      }, 0),
-    );
+      const totalPending = this.roundMoney(
+        schedules.reduce((total, schedule) => {
+          const penalty = this.calculatePenalty(schedule, credit.paymentFrequency, penaltySettings);
+          return total + Number(schedule.totalDue) + penalty - Number(schedule.paidAmount);
+        }, 0),
+      );
 
-    if (paymentAmount > totalPending) {
-      throw new BadRequestException(`El monto supera la deuda pendiente de S/ ${totalPending.toFixed(2)}`);
-    }
+      if (paymentAmount > totalPending) {
+        throw new BadRequestException(`El monto supera la deuda pendiente de S/ ${totalPending.toFixed(2)}`);
+      }
 
-    const appliedSchedules: number[] = [];
-    let remainingAmount = paymentAmount;
+      const appliedSchedules: number[] = [];
+      let remainingAmount = paymentAmount;
 
-    await this.prisma.$transaction(async (tx) => {
       for (const schedule of schedules) {
         if (remainingAmount <= 0) break;
 
@@ -381,6 +407,8 @@ export class CreditsService {
         const schedulePending = this.roundMoney(Number(schedule.totalDue) + schedulePenalty - Number(schedule.paidAmount));
         const appliedAmount = this.roundMoney(Math.min(remainingAmount, schedulePending));
         const newPaidAmount = this.roundMoney(Number(schedule.paidAmount) + appliedAmount);
+        const basePending = Math.max(0, Number(schedule.totalDue) - (Number(schedule.paidAmount) - Number(schedule.penaltyPaid)));
+        const penaltyPayment = this.roundMoney(Math.max(0, appliedAmount - basePending));
         const isPaid = newPaidAmount >= Number(schedule.totalDue) + schedulePenalty;
         const payment = await tx.payment.create({
           data: {
@@ -396,6 +424,8 @@ export class CreditsService {
             paidAmount: newPaidAmount,
             paidAt: isPaid ? new Date() : null,
             penalty: schedulePenalty,
+            penaltyPaid: this.roundMoney(Number(schedule.penaltyPaid) + penaltyPayment),
+            penaltyAccruedDays: Math.max(schedule.penaltyAccruedDays, penaltyDays(schedule.dueDate, terms.graceDays)),
             status: isPaid ? PaymentStatus.PAID : PaymentStatus.PARTIAL,
           },
           where: { id: schedule.id },
@@ -418,24 +448,26 @@ export class CreditsService {
         appliedSchedules.push(schedule.installmentNo);
         remainingAmount = this.roundMoney(remainingAmount - appliedAmount);
       }
-    });
-
-    const credits = await this.findApprovedByClient(credit.clientId);
-
-    return {
-      credits,
-      voucher: {
-        amount: paymentAmount,
-        cashierName: cashSession.user.fullName,
-        clientDni: credit.client.dni,
-        clientName: `${credit.client.firstName} ${credit.client.lastName}`,
-        creditCode: credit.code,
-        paidAt: new Date().toISOString(),
-        remainingBalance: this.roundMoney(totalPending - paymentAmount),
-        scheduleNumbers: appliedSchedules,
-        voucherCode: `VCH-${Date.now()}`,
-      },
-    };
+      const unpaid = await tx.paymentSchedule.count({ where: { creditId, status: { notIn: [PaymentStatus.PAID, PaymentStatus.CANCELED] } } });
+      if (!unpaid) {
+        await tx.credit.update({ where: { id: creditId }, data: { status: CreditStatus.PAID, closedAt: new Date() } });
+        await tx.creditStatusHistory.create({ data: { creditId, changedById: input.userId, fromStatus: credit.status, toStatus: CreditStatus.PAID } });
+      }
+      const voucher = {
+          amount: paymentAmount,
+          cashierName: cashSession.user.fullName,
+          clientDni: credit.client.dni,
+          clientName: `${credit.client.firstName} ${credit.client.lastName}`,
+          creditCode: credit.code,
+          paidAt: new Date().toISOString(),
+          remainingBalance: this.roundMoney(totalPending - paymentAmount),
+          scheduleNumbers: appliedSchedules,
+          voucherCode: `VCH-${input.requestId}`,
+      };
+      await tx.paymentReceipt.create({ data: { id: input.requestId, creditId, userId: input.userId, amount: paymentAmount, voucher } });
+      return { clientId: credit.clientId, voucher };
+    }, { timeout: 20000 });
+    return { credits: await this.findApprovedByClient(result.clientId), voucher: result.voucher };
   }
 
   async disburse(creditId: string, input: DisburseCreditInput) {
@@ -469,6 +501,10 @@ export class CreditsService {
       if (credit.status !== CreditStatus.APPROVED || credit.disbursedAt) {
         throw new BadRequestException('El credito no esta disponible para desembolso');
       }
+      const documents = documentChecklist(credit.generatedDocuments);
+      if (credit.documentDate?.getTime() !== limaDate().getTime() || !Object.values(documents).every(Boolean)) {
+        throw new BadRequestException('Genere contrato, cronograma y solicitud para la fecha de desembolso de hoy');
+      }
 
       const cashSession = await tx.cashSession.findFirst({
         include: { cashBox: true },
@@ -483,6 +519,9 @@ export class CreditsService {
       if (!cashSession) {
         throw new BadRequestException('Debe tener una caja abierta para desembolsar');
       }
+      await tx.$queryRaw`SELECT id FROM cash_sessions WHERE id = ${cashSession.id}::uuid FOR UPDATE`;
+      const lockedSession = await tx.cashSession.findUnique({ where: { id: cashSession.id } });
+      if (lockedSession?.status !== 'OPEN') throw new ConflictException('La caja ya fue cerrada');
 
       const available = await tx.$queryRawUnsafe<Array<{ availableAmount: unknown }>>(
         `
@@ -548,21 +587,44 @@ export class CreditsService {
     };
   }
 
-  private async findOpenCashSession(organizationId: string, userId: string) {
-    const sessions = await this.prisma.cashSession.findMany({
-      include: { user: true },
-      orderBy: { openedAt: 'desc' },
-      take: 1,
-      where: {
-        cashBox: { organizationId },
-        status: 'OPEN',
-        userId,
-      },
+  async prepareDocuments(creditId: string) {
+    const organization = await this.getOrganization();
+    const clientId = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM credits WHERE id = ${creditId}::uuid FOR UPDATE`;
+      const credit = await tx.credit.findFirst({ where: { id: creditId, organizationId: organization.id }, include: { schedules: true } });
+      if (!credit || credit.status !== CreditStatus.APPROVED) throw new BadRequestException('Credito no disponible para generar documentos');
+      readPenaltyTerms(credit.penaltyTerms);
+      const today = limaDate();
+      if (credit.documentDate?.getTime() === today.getTime()) return credit.clientId;
+      for (const schedule of credit.schedules) {
+        await tx.paymentSchedule.update({ where: { id: schedule.id }, data: {
+          dueDate: creditDueDate(credit.paymentFrequency, schedule.installmentNo, today),
+        } });
+      }
+      await tx.credit.update({ where: { id: credit.id }, data: {
+        documentDate: today, generatedDocuments: {}, firstDueDate: creditDueDate(credit.paymentFrequency, 1, today),
+      } });
+      return credit.clientId;
     });
-
-    return sessions[0] ?? null;
+    return this.findApprovedByClient(clientId);
   }
 
+  async confirmDocument(creditId: string, input: ConfirmCreditDocumentInput) {
+    if (!['contract', 'schedule', 'disbursementRequest'].includes(input.type)) throw new BadRequestException('Tipo de documento invalido');
+    const organization = await this.getOrganization();
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM credits WHERE id = ${creditId}::uuid FOR UPDATE`;
+      const credit = await tx.credit.findFirst({ where: { id: creditId, organizationId: organization.id } });
+      if (!credit || credit.status !== CreditStatus.APPROVED || !credit.documentDate
+        || credit.documentDate.getTime() !== limaDate().getTime()
+        || credit.documentDate.toISOString().slice(0, 10) !== input.date) {
+        throw new BadRequestException('Los documentos deben regenerarse para hoy');
+      }
+      const generatedDocuments = { ...documentChecklist(credit.generatedDocuments), [input.type]: true };
+      await tx.credit.update({ where: { id: credit.id }, data: { generatedDocuments } });
+      return generatedDocuments;
+    });
+  }
 
   private async getOrganization() {
     return this.prisma.organization.upsert({
@@ -728,30 +790,11 @@ export class CreditsService {
   }
 
   private calculatePenalty(
-    schedule: { dueDate: Date; paidAmount: unknown; penalty: unknown; status: PaymentStatus; totalDue: unknown },
+    schedule: PenaltyScheduleState,
     paymentFrequency: PaymentFrequency,
     penaltySettings: ReturnType<typeof normalizePenaltySettings>,
   ) {
-    if (schedule.status === PaymentStatus.PAID || schedule.status === PaymentStatus.CANCELED) return Number(schedule.penalty);
-
-    const setting = penaltySettings[paymentFrequency];
-    const daysLate = this.getPenaltyDays(schedule.dueDate, setting.graceDays);
-
-    if (daysLate <= 0) return 0;
-
-    const pendingBase = this.roundMoney(Math.max(0, Number(schedule.totalDue) - Number(schedule.paidAmount)));
-
-    if (pendingBase <= 0) return 0;
-
-    if (setting.method === 'FIXED_DAILY') {
-      return this.roundMoney(setting.fixedDailyAmount * daysLate);
-    }
-
-    const simplePenalty = this.roundMoney(pendingBase * setting.rate * daysLate);
-
-    if (setting.method === 'SIMPLE') return simplePenalty;
-
-    return this.roundMoney(Math.min(simplePenalty, pendingBase * setting.capRate));
+    return accruedPenalty(schedule, penaltySettings[paymentFrequency]);
   }
 
   private getScheduleStatus(schedule: { dueDate: Date; status: PaymentStatus }) {
@@ -761,10 +804,7 @@ export class CreditsService {
   }
 
   private getPenaltyDays(dueDate: Date, graceDays: number) {
-    const today = new Date();
-    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const dueDateStart = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
-    const daysLate = Math.floor((todayStart.getTime() - dueDateStart.getTime()) / 86_400_000);
+    const daysLate = Math.floor((limaDate().getTime() - dueDate.getTime()) / 86_400_000);
 
     return Math.max(0, daysLate - graceDays);
   }
@@ -780,25 +820,7 @@ export class CreditsService {
   }
 
   private getDueDate(paymentFrequency: PaymentFrequency, installmentNo: number) {
-    const dueDate = new Date();
-
-    if (paymentFrequency === PaymentFrequency.DAILY) {
-      dueDate.setDate(dueDate.getDate() + installmentNo);
-      return dueDate;
-    }
-
-    if (paymentFrequency === PaymentFrequency.WEEKLY) {
-      dueDate.setDate(dueDate.getDate() + (installmentNo - 1) * 7);
-      return dueDate;
-    }
-
-    dueDate.setMonth(dueDate.getMonth() + installmentNo - 1);
-    return dueDate;
+    return creditDueDate(paymentFrequency, installmentNo);
   }
 
-  private getRequestFileNames(fileNames: string[] | undefined) {
-    if (!fileNames?.length) return [];
-
-    return fileNames.map((fileName) => fileName.trim()).filter(Boolean);
-  }
 }

@@ -1,19 +1,13 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { ApprovalStatus, CreditStatus, CreditType, Prisma, UserRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { readPenaltyTerms } from '../credits/credits.lib';
 import type { ApprovalRequestListItem, CreditContractData, ReviewApprovalInput, ReviewApprovalResult } from './approval-requests.types';
 
 const demoOrganization = {
   clerkOrganizationId: 'org_demo_solfin',
   name: 'SOLFIN PERU',
   ruc: '20600000001',
-};
-
-const demoReviewer = {
-  email: 'admin@solfin.pe',
-  fullName: 'Admin SOLFIN',
-  id: 'user_demo_admin',
-  role: UserRole.ADMIN,
 };
 
 @Injectable()
@@ -133,7 +127,7 @@ export class ApprovalRequestsService {
       throw new NotFoundException('Credito no encontrado');
     }
 
-    const policy = await this.prisma.creditPolicy.findUnique({ where: { organizationId: credit.organizationId } });
+    const penaltyTerms = readPenaltyTerms(credit.penaltyTerms);
 
     return {
       advisorName: credit.analyst.fullName,
@@ -148,7 +142,8 @@ export class ApprovalRequestsService {
       interestCalculationMethod: credit.interestCalculationMethod,
       interestRate: Number(credit.interestRate),
       paymentFrequency: credit.paymentFrequency,
-      penaltyRate: Number(policy?.defaultPenaltyRate ?? 0),
+      penaltyRate: penaltyTerms.rate,
+      penaltyTerms,
       principalAmount: Number(credit.principalAmount),
       schedules: credit.schedules.map((schedule) => ({
         dueDate: schedule.dueDate.toISOString(),
@@ -169,39 +164,7 @@ export class ApprovalRequestsService {
     });
   }
 
-  private async getReviewer(organizationId: string) {
-    const existingReviewerByEmail = await this.prisma.appUser.findFirst({
-      where: { email: demoReviewer.email, organizationId },
-    });
-    const existingDemoReviewer = await this.prisma.appUser.findFirst({
-      where: { id: demoReviewer.id, organizationId },
-    });
-    const existingReviewer = existingReviewerByEmail ?? existingDemoReviewer;
-
-    if (existingReviewer) {
-      return this.prisma.appUser.update({
-        data: {
-          email: demoReviewer.email,
-          fullName: demoReviewer.fullName,
-          role: demoReviewer.role,
-        },
-        where: { id: existingReviewer.id },
-      });
-    }
-
-    return this.prisma.appUser.create({
-      data: {
-        email: demoReviewer.email,
-        fullName: demoReviewer.fullName,
-        id: demoReviewer.id,
-        organizationId,
-        role: demoReviewer.role,
-      },
-    });
-  }
-
   private async ensureMissingApprovalRequests(organizationId: string) {
-    const reviewer = await this.getReviewer(organizationId);
     const credits = await this.prisma.credit.findMany({
       include: {
         analyst: true,
@@ -226,7 +189,7 @@ export class ApprovalRequestsService {
                 organizationId,
                 reason: 'Solicitud generada automaticamente para revision',
                 requestedAmount: credit.principalAmount,
-                requestedById: reviewer.id,
+                requestedById: credit.analystId,
               },
             },
             status: CreditStatus.PENDING_APPROVAL,

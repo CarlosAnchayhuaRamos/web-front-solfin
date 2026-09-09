@@ -13,6 +13,7 @@ export interface CreditSimulationInput {
 export interface CreateCreditInput extends CreditSimulationInput {
   clientId: string;
   fileNames?: string[];
+  documentIds?: string[];
   notes?: string;
 }
 
@@ -41,6 +42,22 @@ export interface CreditSimulationResult {
 export interface PayInstallmentsInput {
   amount: number;
   userId: string;
+  requestId: string;
+}
+
+export interface ConfirmCreditDocumentInput {
+  type: 'contract' | 'schedule' | 'disbursementRequest';
+  date: string;
+}
+
+export interface PenaltyScheduleState {
+  dueDate: Date;
+  paidAmount: unknown;
+  penalty: unknown;
+  penaltyPaid: unknown;
+  penaltyAccruedDays: number;
+  status: string;
+  totalDue: unknown;
 }
 
 export interface DisburseCreditInput {

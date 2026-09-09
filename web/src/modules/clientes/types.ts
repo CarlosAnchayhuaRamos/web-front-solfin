@@ -64,6 +64,10 @@ export interface ClientCreditSchedule {
 }
 
 export interface ClientCredit {
+  files: Array<{ id: string; fileName: string; sizeBytes: number }>;
+  documentDate: string | null;
+  generatedDocuments: CreditDocumentChecklist;
+  penaltyTerms: import('../parametros/types').PenaltyFrequencySetting;
   advisorId: string;
   advisorName: string;
   approvedAt: string;
@@ -116,4 +120,9 @@ export interface PaymentVoucher {
   remainingBalance: number;
   scheduleNumbers: number[];
   voucherCode: string;
+}
+
+export interface PendingPaymentRequest {
+  amount: number;
+  requestId: string;
 }

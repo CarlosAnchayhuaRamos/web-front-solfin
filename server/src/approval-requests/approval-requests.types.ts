@@ -28,6 +28,7 @@ export interface ReviewApprovalInput {
 }
 
 export interface CreditContractData {
+  penaltyTerms: import('../parameters/parameters.types').PenaltyFrequencySetting;
   advisorName: string;
   approvedAt: string;
   approvedByName: string;
