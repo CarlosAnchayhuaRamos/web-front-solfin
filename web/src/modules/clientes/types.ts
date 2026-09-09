@@ -126,3 +126,9 @@ export interface PendingPaymentRequest {
   amount: number;
   requestId: string;
 }
+export interface ClientPage {
+  items: Client[];
+  total: number;
+  page: number;
+  pageSize: number;
+}

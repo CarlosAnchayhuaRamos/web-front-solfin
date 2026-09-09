@@ -9,37 +9,12 @@ const demoOrganization = {
   ruc: '20600000001',
 };
 
-const demoClients: CreateClientInput[] = [
-  {
-    dni: '45678912',
-    firstName: 'Carlos',
-    lastName: 'Medina',
-    phone: '986366302',
-    status: ClientStatus.ACTIVE,
-  },
-  {
-    dni: '47651289',
-    firstName: 'Maria',
-    lastName: 'Quispe',
-    phone: '934551122',
-    status: ClientStatus.WATCHLIST,
-  },
-  {
-    dni: '40112233',
-    firstName: 'Jorge',
-    lastName: 'Salazar',
-    phone: '977889900',
-    status: ClientStatus.BLOCKED,
-  },
-];
-
 @Injectable()
 export class ClientsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async findAll() {
     const organization = await this.getOrganization();
-    await this.ensureDemoClients(organization.id);
 
     const clients = await this.prisma.client.findMany({
       where: { organizationId: organization.id },
@@ -54,6 +29,42 @@ export class ClientsService {
     });
 
     return clients.map((client) => this.toListItem(client));
+  }
+
+  async findPage(page: number, name: string, dni: string) {
+    if (!Number.isSafeInteger(page) || page < 1 || page > 1000000) {
+      throw new BadRequestException('Pagina invalida');
+    }
+    if (name.length > 200 || dni.length > 8) throw new BadRequestException('Filtro invalido');
+    const organization = await this.getOrganization();
+    const pageSize = 25;
+    const where: Prisma.ClientWhereInput = {
+      organizationId: organization.id,
+      dni: { contains: dni.trim() },
+      AND: name.trim().split(/\s+/).filter(Boolean).map((part) => ({ OR: [
+        { firstName: { contains: part, mode: 'insensitive' as const } },
+        { lastName: { contains: part, mode: 'insensitive' as const } },
+      ] })),
+    };
+    return this.prisma.$transaction(async (tx) => {
+      const total = await tx.client.count({ where });
+      const clients = await tx.client.findMany({
+        where, skip: (page - 1) * pageSize, take: pageSize,
+        orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }, { id: 'asc' }],
+      });
+      const totals = await tx.credit.groupBy({
+        by: ['clientId'],
+        where: { clientId: { in: clients.map((client) => client.id) }, status: { in: ['ACTIVE', 'OVERDUE', 'DEFAULTED'] } },
+        _sum: { totalAmount: true }, _count: { _all: true },
+      });
+      const summary = new Map(totals.map((row) => [row.clientId, row]));
+      return { total, page, pageSize, items: clients.map((client) => {
+        const row = summary.get(client.id);
+        return this.toListItem({ ...client, _count: { credits: row?._count._all ?? 0 },
+          credits: row?._sum.totalAmount ? [{ totalAmount: row._sum.totalAmount }] : [],
+        });
+      }) };
+    }, { isolationLevel: 'RepeatableRead' });
   }
 
   async create(input: CreateClientInput) {
@@ -153,24 +164,6 @@ export class ClientsService {
       create: demoOrganization,
       update: { name: demoOrganization.name },
       where: { clerkOrganizationId: demoOrganization.clerkOrganizationId },
-    });
-  }
-
-  private async ensureDemoClients(organizationId: string) {
-    const count = await this.prisma.client.count({ where: { organizationId } });
-
-    if (count > 0) return;
-
-    await this.prisma.client.createMany({
-      data: demoClients.map((client) => ({
-        dni: client.dni,
-        firstName: client.firstName,
-        lastName: client.lastName,
-        organizationId,
-        phone: client.phone,
-        status: client.status ?? ClientStatus.ACTIVE,
-      })),
-      skipDuplicates: true,
     });
   }
 

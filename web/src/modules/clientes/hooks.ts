@@ -3,8 +3,14 @@ import { apiBaseUrl, apiFetch } from '../../common/api/client';
 import type { Client, ClientCredit, CreateClientInput, CreditAdvisor, CreditDisbursement, CreditDocumentChecklist, CreditDocumentType, OpenCashSession, PaymentVoucher, UpdateClientInput } from './types';
 import { getApiErrorMessage, toClientPayload } from './lib';
 import type { PendingPaymentRequest } from './types';
+import type { ClientFilters, ClientPage } from './types';
+import { initialClientFilters } from './data';
 
 export const useClients = () => {
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [filters, setFilters] = useState<ClientFilters>(initialClientFilters);
+  const requestVersion = useRef(0);
   const [clients, setClients] = useState<Client[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -13,6 +19,7 @@ export const useClients = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const fetchClients = useCallback(async (options?: { silent?: boolean }) => {
+    const version = ++requestVersion.current;
     setError(null);
 
     if (options?.silent) {
@@ -24,29 +31,34 @@ export const useClients = () => {
     }
 
     try {
-      const response = await apiFetch(`${apiBaseUrl}/clients`, { cache: 'no-store' });
+      const query = new URLSearchParams({ page: String(page), name: filters.name, dni: filters.dni });
+      const response = await apiFetch(`${apiBaseUrl}/clients/page?${query}`, { cache: 'no-store' });
+      if (version !== requestVersion.current) return false;
 
       if (!response.ok) {
         setError(await getApiErrorMessage(response));
         return false;
       }
 
-      const data = (await response.json()) as Client[];
-      setClients(data);
+      const data = (await response.json()) as ClientPage;
+      if (version !== requestVersion.current) return false;
+      setClients(data.items);
+      setTotal(data.total);
       return true;
     } catch {
+      if (version !== requestVersion.current) return false;
       setError('No se pudo conectar con el backend');
       return false;
     } finally {
-      if (options?.silent) {
+      if (version === requestVersion.current && options?.silent) {
         setIsRefreshing(false);
       }
 
-      if (!options?.silent) {
+      if (version === requestVersion.current) {
         setIsLoading(false);
       }
     }
-  }, []);
+  }, [page, filters]);
 
   const createClient = useCallback(
     async (input: CreateClientInput) => {
@@ -107,10 +119,12 @@ export const useClients = () => {
   );
 
   useEffect(() => {
-    void fetchClients();
+    const timer = setTimeout(() => void fetchClients({ silent: true }), 250);
+    return () => { clearTimeout(timer); requestVersion.current += 1; };
   }, [fetchClients]);
 
   return {
+    page, setPage, total, filters, setFilters,
     clients,
     createClient,
     error,

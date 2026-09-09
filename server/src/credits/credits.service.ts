@@ -107,7 +107,6 @@ export class CreditsService {
       throw new NotFoundException('Usuario solicitante no encontrado');
     }
 
-    const code = await this.nextCreditCode(organization.id);
     if (input.fileNames?.length) throw new BadRequestException('Suba los archivos antes de registrar el credito');
     const documentIds = input.documentIds ?? [];
     if (!Array.isArray(documentIds) || documentIds.some((id) => typeof id !== 'string') || new Set(documentIds).size !== documentIds.length) {
@@ -121,6 +120,8 @@ export class CreditsService {
     const penaltySetting = normalizePenaltySettings(policy.penaltySettings, Number(policy.defaultPenaltyRate), policy.graceDays)[input.paymentFrequency];
 
     const credit = await this.prisma.$transaction(async (tx) => {
+      const sequence = await tx.$queryRaw<Array<{ value: bigint }>>`SELECT nextval('credit_code_seq') AS value`;
+      const code = `CRE-${String(sequence[0].value).padStart(5, '0')}`;
       const created = await tx.credit.create({
         data: {
           analystId: requester.id,
@@ -175,6 +176,11 @@ export class CreditsService {
       });
       if (attached.count !== documentIds.length) throw new BadRequestException('Uno o mas adjuntos no estan disponibles');
       const documents = await tx.document.findMany({ where: { creditId: created.id } });
+      await tx.auditLog.create({ data: {
+        organizationId: organization.id, actorId: requester.id,
+        entity: 'Credit', entityId: created.id, action: 'CREATE',
+        after: { code, principalAmount: simulation.amount, status: created.status },
+      } });
       return { ...created, documents };
     });
 
@@ -398,6 +404,7 @@ export class CreditsService {
       }
 
       const appliedSchedules: number[] = [];
+      const paymentIds: string[] = [];
       let remainingAmount = paymentAmount;
 
       for (const schedule of schedules) {
@@ -416,8 +423,12 @@ export class CreditsService {
             creditId,
             method: PaymentMethod.CASH,
             paymentScheduleId: schedule.id,
+            baseAmount: this.roundMoney(appliedAmount - penaltyPayment),
+            penaltyAmount: penaltyPayment,
           },
         });
+
+        paymentIds.push(payment.id);
 
         await tx.paymentSchedule.update({
           data: {
@@ -464,7 +475,15 @@ export class CreditsService {
           scheduleNumbers: appliedSchedules,
           voucherCode: `VCH-${input.requestId}`,
       };
-      await tx.paymentReceipt.create({ data: { id: input.requestId, creditId, userId: input.userId, amount: paymentAmount, voucher } });
+      await tx.paymentReceipt.create({ data: {
+        id: input.requestId, creditId, userId: input.userId, amount: paymentAmount, voucher,
+        payments: { connect: paymentIds.map((id) => ({ id })) },
+      } });
+      await tx.auditLog.create({ data: {
+        organizationId: organization.id, actorId: input.userId,
+        entity: 'PaymentReceipt', entityId: input.requestId, action: 'CASH_COLLECTION',
+        after: { creditId, amount: paymentAmount, paymentIds, cashSessionId: cashSession.id },
+      } });
       return { clientId: credit.clientId, voucher };
     }, { timeout: 20000 });
     return { credits: await this.findApprovedByClient(result.clientId), voucher: result.voucher };
@@ -559,6 +578,12 @@ export class CreditsService {
         data: { disbursedAt: new Date(), status: CreditStatus.ACTIVE },
         where: { id: credit.id },
       });
+      await tx.auditLog.create({ data: {
+        organizationId: organization.id, actorId: responsible.id,
+        entity: 'Credit', entityId: credit.id, action: 'CASH_DISBURSEMENT',
+        before: { status: credit.status },
+        after: { status: CreditStatus.ACTIVE, amount: disbursementAmount, cashSessionId: cashSession.id },
+      } });
       await tx.creditStatusHistory.create({
         data: {
           changedById: responsible.id,
@@ -686,11 +711,6 @@ export class CreditsService {
       update: {},
       where: { organizationId },
     });
-  }
-
-  private async nextCreditCode(organizationId: string) {
-    const count = await this.prisma.credit.count({ where: { organizationId } });
-    return `CRE-${String(count + 1).padStart(5, '0')}`;
   }
 
   private validateSimulationInput(input: CreditSimulationInput) {

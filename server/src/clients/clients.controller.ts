@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Put } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, Query } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { Roles } from '../auth/auth.decorators';
 import { ClientsService } from './clients.service';
@@ -11,6 +11,11 @@ export class ClientsController {
   @Get()
   findAll() {
     return this.clientsService.findAll();
+  }
+
+  @Get('page')
+  findPage(@Query('page') page = '1', @Query('name') name = '', @Query('dni') dni = '') {
+    return this.clientsService.findPage(Number(page), name, dni);
   }
 
   @Post()

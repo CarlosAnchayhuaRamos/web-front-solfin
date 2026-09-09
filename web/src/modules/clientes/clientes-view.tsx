@@ -6,10 +6,9 @@ import { hasRole, useAuth } from '../../common/auth/AuthProvider';
 import { formatDueDate, formatMoney, formatPercentage } from '../../common/lib/format';
 import { escapePrintHtml, getPrintBrandMarkup, getPrintBrandStyles, printDocument } from '../../common/lib/print';
 import { PageHeader } from '../../common/layout/PageHeader';
-import { clientStatusOptions, initialClientFilters, initialClientForm, initialCreditDocumentChecklist } from './data';
+import { clientStatusOptions, initialClientForm, initialCreditDocumentChecklist } from './data';
 import { useClientCredits, useClients } from './hooks';
 import {
-  filterClients,
   getClientRiskColor,
   getClientRiskLabel,
   getPendingCreditDocumentLabels,
@@ -38,7 +37,8 @@ export const ClientesView: React.FC = () => {
   const { user } = useAuth();
   const canAssignCreditAdvisor = hasRole(user, ['ADMIN']);
   const canUseCashSessions = hasRole(user, ['ADMIN', 'CASHIER']);
-  const { clients, createClient, error, isCreating, isLoading, isUpdating, refetch, updateClient } = useClients();
+  const { clients, createClient, error, isCreating, isLoading, isUpdating, isRefreshing, refetch, updateClient,
+    page, setPage, total, filters, setFilters } = useClients();
   const {
     advisors,
     assignAdvisor,
@@ -59,7 +59,6 @@ export const ClientesView: React.FC = () => {
   } = useClientCredits(canAssignCreditAdvisor, canUseCashSessions);
   const voucher = paidVoucherPreview ?? emptyPaymentVoucher;
   const [form, setForm] = useState<ClientFormState>(initialClientForm);
-  const [filters, setFilters] = useState<ClientFilters>(initialClientFilters);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [selectedCreditId, setSelectedCreditId] = useState<string | null>(null);
@@ -100,6 +99,7 @@ export const ClientesView: React.FC = () => {
   };
 
   const handleFilterChange = (field: keyof ClientFilters, value: string) => {
+    setPage(1);
     setFilters((currentFilters) => ({
       ...currentFilters,
       [field]: value,
@@ -236,7 +236,7 @@ export const ClientesView: React.FC = () => {
     );
   }
 
-  if (!clients?.length) {
+  if (!clients) {
     return (
       <>
         <PageHeader
@@ -251,7 +251,7 @@ export const ClientesView: React.FC = () => {
     );
   }
 
-  const filteredClients = filterClients(clients, filters);
+  const filteredClients = clients;
 
   return (
     <>
@@ -425,6 +425,11 @@ export const ClientesView: React.FC = () => {
           <div className="card__body">No hay clientes que coincidan con los filtros.</div>
         </div>
       ) : null}
+      <div className="actions" aria-label="Paginacion de clientes">
+        <Button variant="outline" disabled={page === 1 || isRefreshing} onClick={() => setPage(page - 1)}>Anterior</Button>
+        <span>Pagina {page} de {Math.max(1, Math.ceil(total / 25))} ({total} clientes)</span>
+        <Button variant="outline" disabled={page * 25 >= total || isRefreshing} onClick={() => setPage(page + 1)}>Siguiente</Button>
+      </div>
       {selectedClient ? (
         <section className="grid">
           <div className="card">

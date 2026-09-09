@@ -19,6 +19,7 @@ const makeService = () => {
     cashSession: { findFirst: jest.fn(async () => ({ id: 'cash', user: { fullName: 'Cashier' } })), findUnique: jest.fn(async () => ({ status: 'OPEN' })) },
     payment: { create: jest.fn(async () => ({ id: 'payment' })) },
     cashMovement: { create: jest.fn() }, creditStatusHistory: { create: jest.fn() },
+    auditLog: { create: jest.fn() },
   };
   const prisma = { $transaction: jest.fn(async (run) => run(tx)) };
   const service = new CreditsService(prisma);
@@ -36,6 +37,9 @@ test('retrying same receipt returns original voucher without collecting again', 
   expect(tx.payment.create).toHaveBeenCalledTimes(1);
   expect(tx.cashMovement.create).toHaveBeenCalledTimes(1);
   expect(schedule.paidAmount).toBe(50);
+  expect(tx.payment.create).toHaveBeenCalledWith({ data: expect.objectContaining({ baseAmount: 50, penaltyAmount: 0 }) });
+  expect(tx.paymentReceipt.create).toHaveBeenCalledWith({ data: expect.objectContaining({ payments: { connect: [{ id: 'payment' }] } }) });
+  expect(tx.auditLog.create).toHaveBeenCalledTimes(1);
   expect(calls.slice(0, 2)).toEqual(['lock', 'read-credit']);
 });
 
@@ -58,4 +62,23 @@ test('closed cash session prevents all payment writes', async () => {
   tx.cashSession.findUnique.mockResolvedValue({ status: 'CLOSED' });
   await expect(service.payInstallments('credit', input)).rejects.toThrow('cerrada');
   expect(tx.payment.create).not.toHaveBeenCalled();
+});
+
+test('partial penalty payment preserves base-first allocation in the receipt', async () => {
+  const { service, tx } = makeService();
+  service.calculatePenalty = () => 10;
+  await service.payInstallments('credit', { ...input, amount: 105 });
+  expect(tx.payment.create).toHaveBeenCalledWith({ data: expect.objectContaining({ amount: 105, baseAmount: 100, penaltyAmount: 5 }) });
+});
+
+test('one cash collection links every covered installment to one receipt', async () => {
+  const { service, tx, schedule } = makeService();
+  tx.paymentSchedule.findMany.mockResolvedValue([schedule, { ...schedule, id: 'schedule-2', installmentNo: 2 }]);
+  tx.payment.create.mockResolvedValueOnce({ id: 'payment-1' }).mockResolvedValueOnce({ id: 'payment-2' });
+  await service.payInstallments('credit', { ...input, amount: 150 });
+  expect(tx.payment.create.mock.calls.map(([arg]) => arg.data.amount)).toEqual([100, 50]);
+  expect(tx.paymentReceipt.create).toHaveBeenCalledWith({ data: expect.objectContaining({
+    amount: 150, payments: { connect: [{ id: 'payment-1' }, { id: 'payment-2' }] },
+  }) });
+  expect(tx.auditLog.create).toHaveBeenCalledTimes(1);
 });

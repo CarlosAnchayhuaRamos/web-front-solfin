@@ -181,6 +181,7 @@ model AppUser {
   generatedReports   ReportExport[]
   auditLogs          AuditLog[]
   statusTransitions  CreditStatusHistory[]
+  paymentReceipts    PaymentReceipt[]
 
   @@unique([organizationId, email])
   @@unique([organizationId, dni])
@@ -214,11 +215,40 @@ model Client {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   credits      Credit[]
   documents    Document[]
+  account      CustomerAccount?
 
   @@unique([organizationId, dni])
   @@index([organizationId, status])
   @@index([organizationId, lastName, firstName])
   @@map("clients")
+}
+
+// Reserved for the future customer portal; never an employee identity.
+model CustomerAccount {
+  id            String    @id @default(uuid()) @db.Uuid
+  clientId      String    @unique @db.Uuid
+  subject       String    @unique
+  isActive      Boolean   @default(false)
+  verifiedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  client        Client    @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  sessions      CustomerSession[]
+
+  @@map("customer_accounts")
+}
+
+model CustomerSession {
+  id            String    @id @default(uuid()) @db.Uuid
+  accountId     String    @db.Uuid
+  tokenHash     String    @unique
+  expiresAt     DateTime
+  revokedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  account       CustomerAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@index([accountId, expiresAt])
+  @@map("customer_sessions")
 }
 
 model CreditProduct {
@@ -271,7 +301,7 @@ model Credit {
   createdAt                 DateTime                  @default(now())
   updatedAt                 DateTime                  @updatedAt
 
-  organization    Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization    Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   client          Client                @relation(fields: [clientId], references: [id], onDelete: Restrict)
   product         CreditProduct         @relation(fields: [productId], references: [id], onDelete: Restrict)
   analyst         AppUser               @relation("AnalystCredits", fields: [analystId], references: [id], onDelete: Restrict)
@@ -283,6 +313,8 @@ model Credit {
   documents       Document[]
   statusHistory   CreditStatusHistory[]
   cashMovements   CashMovement[]
+
+  receipts        PaymentReceipt[]
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -349,7 +381,7 @@ model PaymentSchedule {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
-  credit   Credit    @relation(fields: [creditId], references: [id], onDelete: Cascade)
+  credit   Credit    @relation(fields: [creditId], references: [id], onDelete: Restrict)
   payments Payment[]
 
   @@unique([creditId, installmentNo])
@@ -368,13 +400,18 @@ model Payment {
   notes             String?
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
+  receiptId         String?       @db.Uuid
+  baseAmount        Decimal?      @db.Decimal(14, 2)
+  penaltyAmount     Decimal?      @db.Decimal(14, 2)
 
   credit          Credit           @relation(fields: [creditId], references: [id], onDelete: Restrict)
   paymentSchedule PaymentSchedule? @relation(fields: [paymentScheduleId], references: [id], onDelete: SetNull)
   cashMovements   CashMovement[]
+  receipt         PaymentReceipt? @relation(fields: [receiptId], references: [id], onDelete: Restrict)
 
   @@index([creditId, paidAt])
   @@index([paymentScheduleId])
+  @@index([receiptId])
   @@map("payments")
 }
 
@@ -385,6 +422,12 @@ model PaymentReceipt {
   amount    Decimal  @db.Decimal(14, 2)
   voucher   Json
   createdAt DateTime @default(now())
+  credit    Credit   @relation(fields: [creditId], references: [id], onDelete: Restrict)
+  user      AppUser  @relation(fields: [userId], references: [id], onDelete: Restrict)
+  payments  Payment[]
+
+  @@index([creditId, createdAt])
+  @@index([userId, createdAt])
 
   @@map("payment_receipts")
 }
@@ -398,7 +441,7 @@ model CreditStatusHistory {
   notes       String?
   createdAt   DateTime      @default(now())
 
-  credit    Credit   @relation(fields: [creditId], references: [id], onDelete: Cascade)
+  credit    Credit   @relation(fields: [creditId], references: [id], onDelete: Restrict)
   changedBy AppUser? @relation(fields: [changedById], references: [id], onDelete: SetNull)
 
   @@index([creditId, createdAt])
@@ -421,8 +464,8 @@ model Document {
   createdAt      DateTime        @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  client       Client?      @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  credit       Credit?      @relation(fields: [creditId], references: [id], onDelete: Cascade)
+  client       Client?      @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  credit       Credit?      @relation(fields: [creditId], references: [id], onDelete: Restrict)
   uploadedBy   AppUser      @relation("UploadedDocuments", fields: [uploadedById], references: [id], onDelete: Restrict)
 
   @@index([organizationId, type])
