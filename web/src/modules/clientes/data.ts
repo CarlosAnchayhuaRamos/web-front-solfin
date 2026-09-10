@@ -8,6 +8,17 @@ export const clientStatusOptions: Array<{ label: string; value: ClientStatus }> 
 ];
 
 export const initialClientForm: ClientFormState = {
+  referenceName: '',
+  personalAddressReference: '',
+  businessAddressReference: '',
+  referencePhone: '',
+  businessRuc: '',
+  businessName: '',
+  businessPhone: '',
+  businessActivity: '',
+  department: '',
+  province: '',
+  district: '',
   dni: '',
   email: '',
   firstName: '',

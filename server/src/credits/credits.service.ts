@@ -834,7 +834,7 @@ export class CreditsService {
   }
 
   private getPaymentFrequencyMonthFactor(paymentFrequency: PaymentFrequency) {
-    if (paymentFrequency === PaymentFrequency.DAILY) return 1 / 30;
+    if (paymentFrequency === PaymentFrequency.DAILY) return 1 / 26;
     if (paymentFrequency === PaymentFrequency.WEEKLY) return 7 / 30;
     return 1;
   }

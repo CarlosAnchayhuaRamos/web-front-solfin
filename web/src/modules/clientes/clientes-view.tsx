@@ -14,6 +14,7 @@ import {
   getPendingCreditDocumentLabels,
   isCreditDocumentChecklistComplete,
   normalizeDateInput,
+  displayBirthDate,
   toClientFormState,
 } from './lib';
 import { printApprovedPaymentSchedule, printCreditContract, printDisbursementRequest } from '../solicitudes/lib';
@@ -312,8 +313,8 @@ export const ClientesView: React.FC = () => {
                   inputMode="numeric"
                   maxLength={10}
                   onChange={(event) => handleChange('birthDate', normalizeDateInput(event.target.value))}
-                  pattern="\d{4}-\d{2}-\d{2}"
-                  placeholder="YYYY-MM-DD"
+                  pattern="\d{2}-\d{2}-\d{4}"
+                  placeholder="DD-MM-YYYY"
                   type="text"
                   value={form.birthDate}
                 />
@@ -327,9 +328,56 @@ export const ClientesView: React.FC = () => {
                 <input id="personalAddress" onChange={(event) => handleChange('personalAddress', event.target.value)} value={form.personalAddress} />
               </div>
               <div className="field">
+                <label htmlFor="personalAddressReference">Referencia de la direccion del cliente</label>
+                <input id="personalAddressReference" onChange={(event) => handleChange('personalAddressReference', event.target.value)} value={form.personalAddressReference} />
+              </div>
+              <div className="field">
+                <label htmlFor="department">Departamento</label>
+                <input id="department" onChange={(event) => handleChange('department', event.target.value)} value={form.department} />
+              </div>
+              <div className="field">
+                <label htmlFor="province">Provincia</label>
+                <input id="province" onChange={(event) => handleChange('province', event.target.value)} value={form.province} />
+              </div>
+              <div className="field">
+                <label htmlFor="district">Distrito</label>
+                <input id="district" onChange={(event) => handleChange('district', event.target.value)} value={form.district} />
+              </div>
+              <div className="field">
+                <label htmlFor="referenceName">Nombre de contacto</label>
+                <input id="referenceName" onChange={(event) => handleChange('referenceName', event.target.value)} value={form.referenceName} />
+              </div>
+              <div className="field">
+                <label htmlFor="referencePhone">Telefono de contacto</label>
+                <input id="referencePhone" onChange={(event) => handleChange('referencePhone', event.target.value)} value={form.referencePhone} />
+              </div>
+              <fieldset className="form-grid" style={{ gridColumn: '1 / -1', minWidth: 0 }}>
+              <legend>Datos de negocio (opcional)</legend>
+              <div className="field">
+                <label htmlFor="businessRuc">RUC</label>
+                <input id="businessRuc" maxLength={11} pattern="[0-9]{11}" onChange={(event) => handleChange('businessRuc', event.target.value)} value={form.businessRuc} />
+              </div>
+              <div className="field">
+                <label htmlFor="businessName">Nombre del negocio</label>
+                <input id="businessName" onChange={(event) => handleChange('businessName', event.target.value)} value={form.businessName} />
+              </div>
+              <div className="field">
+                <label htmlFor="businessPhone">Telefono del negocio</label>
+                <input id="businessPhone" onChange={(event) => handleChange('businessPhone', event.target.value)} value={form.businessPhone} />
+              </div>
+              <div className="field">
+                <label htmlFor="businessActivity">Giro del negocio</label>
+                <input id="businessActivity" onChange={(event) => handleChange('businessActivity', event.target.value)} value={form.businessActivity} />
+              </div>
+              <div className="field">
                 <label htmlFor="businessAddress">Direccion del negocio</label>
                 <input id="businessAddress" onChange={(event) => handleChange('businessAddress', event.target.value)} value={form.businessAddress} />
               </div>
+              <div className="field">
+                <label htmlFor="businessAddressReference">Referencia de la direccion del negocio</label>
+                <input id="businessAddressReference" onChange={(event) => handleChange('businessAddressReference', event.target.value)} value={form.businessAddressReference} />
+              </div>
+              </fieldset>
               <div className="field">
                 <label htmlFor="status">Estado</label>
                 <select id="status" onChange={(event) => handleChange('status', event.target.value)} value={form.status}>
@@ -347,22 +395,8 @@ export const ClientesView: React.FC = () => {
                   onChange={(event) => handleChange('isSpecial', event.target.checked)}
                   type="checkbox"
                 />
-                Cliente especial
+                Cliente exclusivo
               </label>
-              {form.isSpecial ? (
-                <div className="field">
-                  <label htmlFor="specialInterestRate">Tasa especial mensual (%)</label>
-                  <input
-                    id="specialInterestRate"
-                    min="0"
-                    onChange={(event) => handleChange('specialInterestRate', event.target.value)}
-                    placeholder="Usar tasa especial global"
-                    step="0.001"
-                    type="number"
-                    value={form.specialInterestRate}
-                  />
-                </div>
-              ) : null}
               <div className="actions">
                 <Button disabled={isCreating || isUpdating} type="submit">
                   {getSubmitLabel()}
@@ -396,24 +430,25 @@ export const ClientesView: React.FC = () => {
               <th>Nacimiento</th>
               <th>Direccion personal</th>
               <th>Direccion negocio</th>
-              <th>Deuda</th>
+              <th className="table__number">Deuda</th>
               <th>Estado</th>
             </tr>
           </thead>
           <tbody>
             {filteredClients.map((client) => (
-              <tr className={selectedClient?.id === client.id ? 'table__row--selected' : undefined} key={client.id} onClick={() => handleSelectClient(client)}>
+              <tr data-interactive="true" className={selectedClient?.id === client.id ? 'table__row--selected' : undefined} key={client.id} onClick={() => handleSelectClient(client)}>
                 <td>{client.fullName}</td>
                 <td>{client.dni}</td>
                 <td>{client.phone}</td>
-                <td>{client.birthDate ?? '-'}</td>
-                <td>{client.personalAddress ?? '-'}</td>
+                <td>{displayBirthDate(client.birthDate) || '-'}</td>
+                <td>{[client.personalAddress, client.department, client.province, client.district].filter(Boolean).join(', ') || '-'}</td>
                 <td>{client.businessAddress ?? '-'}</td>
                 <td className="money">{formatMoney(client.totalDebt)}</td>
                 <td>
-                  <Badge color={client.isSpecial ? 'yellow' : getClientRiskColor(client)}>
-                    {client.isSpecial ? 'Especial' : getClientRiskLabel(client)}
+                  <Badge color={getClientRiskColor(client)}>
+                    {getClientRiskLabel(client)}
                   </Badge>
+                  {client.isSpecial ? <> <Badge color="yellow">Exclusivo</Badge></> : null}
                 </td>
               </tr>
             ))}
@@ -459,10 +494,10 @@ export const ClientesView: React.FC = () => {
                     <thead>
                       <tr>
                         <th>Codigo</th>
-                        <th>Monto credito</th>
-                        <th>Interes</th>
-                        <th>Mora</th>
-                        <th>Valor neto</th>
+                        <th className="table__number">Monto credito</th>
+                        <th className="table__number">Interes</th>
+                        <th className="table__number">Mora</th>
+                        <th className="table__number">Valor neto</th>
                         <th>Estado</th>
                         <th>Asesor</th>
                         <th>Accion</th>
@@ -476,6 +511,7 @@ export const ClientesView: React.FC = () => {
                         return (
                         <tr
                           className={selectedCreditId === credit.id ? 'table__row--selected' : undefined}
+                          data-interactive="true"
                           key={credit.id}
                           onClick={() => {
                             setSelectedCreditId(credit.id);
@@ -485,7 +521,7 @@ export const ClientesView: React.FC = () => {
                         >
                           <td>{credit.code}</td>
                           <td className="money">{formatMoney(credit.principalAmount)}</td>
-                          <td>{formatPercentage(credit.interestRate)}</td>
+                          <td className="table__number">{formatPercentage(credit.interestRate)}</td>
                           <td className="money">{formatMoney(credit.overdueAmount)}</td>
                           <td className="money">{formatMoney(credit.netValue)}</td>
                           <td>{credit.status}</td>
@@ -610,12 +646,12 @@ export const ClientesView: React.FC = () => {
                       <tr>
                         <th>Cuota</th>
                         <th>Vence</th>
-                        <th>Capital</th>
-                        <th>Interes</th>
-                        <th>Mora</th>
-                        <th>Total</th>
-                        <th>Pagado</th>
-                        <th>Saldo</th>
+                        <th className="table__number">Capital</th>
+                        <th className="table__number">Interes</th>
+                        <th className="table__number">Mora</th>
+                        <th className="table__number">Total</th>
+                        <th className="table__number">Pagado</th>
+                        <th className="table__number">Saldo</th>
                         <th>Estado</th>
                       </tr>
                     </thead>
@@ -626,6 +662,7 @@ export const ClientesView: React.FC = () => {
                         return (
                           <tr
                             className={selectedScheduleId === schedule.id ? 'table__row--selected' : undefined}
+                            data-interactive={canPayInstallments && Boolean(ownOpenCashSession) && isSelectedCreditDisbursed && pendingAmount > 0}
                             key={schedule.id}
                             onClick={() => {
                               if (!canPayInstallments || !ownOpenCashSession || !isSelectedCreditDisbursed || pendingAmount <= 0) return;

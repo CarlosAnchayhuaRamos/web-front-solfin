@@ -30,13 +30,30 @@ export const getApiErrorMessage = async (response: Response) => {
 export const normalizeDateInput = (value: string) => {
   const digits = value.replace(/\D/g, '').slice(0, 8);
 
-  if (digits.length <= 4) return digits;
-  if (digits.length <= 6) return `${digits.slice(0, 4)}-${digits.slice(4)}`;
-  return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6)}`;
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 4) return `${digits.slice(0, 2)}-${digits.slice(2)}`;
+  return `${digits.slice(0, 2)}-${digits.slice(2, 4)}-${digits.slice(4)}`;
+};
+
+export const displayBirthDate = (value: string | null) => {
+  if (!value) return '';
+  const [year, month, day] = value.split('-');
+  return `${day}-${month}-${year}`;
 };
 
 export const toClientFormState = (client: Client): ClientFormState => {
   return {
+    referenceName: client.referenceName ?? '',
+    personalAddressReference: client.personalAddressReference ?? '',
+    businessAddressReference: client.businessAddressReference ?? '',
+    referencePhone: client.referencePhone ?? '',
+    businessRuc: client.businessRuc ?? '',
+    businessName: client.businessName ?? '',
+    businessPhone: client.businessPhone ?? '',
+    businessActivity: client.businessActivity ?? '',
+    department: client.department ?? '',
+    province: client.province ?? '',
+    district: client.district ?? '',
     dni: client.dni,
     email: client.email ?? '',
     firstName: client.firstName,
@@ -45,7 +62,7 @@ export const toClientFormState = (client: Client): ClientFormState => {
     phone: client.phone,
     personalAddress: client.personalAddress ?? '',
     businessAddress: client.businessAddress ?? '',
-    birthDate: client.birthDate ?? '',
+    birthDate: displayBirthDate(client.birthDate),
     specialInterestRate: client.specialInterestRate == null ? '' : toRateFormValue(client.specialInterestRate),
     status: client.status,
   };
@@ -54,6 +71,7 @@ export const toClientFormState = (client: Client): ClientFormState => {
 export const toClientPayload = (form: ClientFormState) => {
   return {
     ...form,
+    birthDate: form.birthDate ? form.birthDate.split('-').reverse().join('-') : '',
     specialInterestRate: form.isSpecial && form.specialInterestRate.trim()
       ? toRateInputValue(form.specialInterestRate)
       : null,

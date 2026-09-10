@@ -23,11 +23,11 @@ const App: React.FC = () => {
         <Route element={<ProtectedRoute />}>
           <Route element={<AppShell />}>
             <Route element={<ProtectedRoute roles={['ADMIN', 'ANALYST']} />}>
-              <Route path="/inicio" element={<InicioView />} />
               <Route path="/reportes" element={<ReportesView />} />
               <Route path="/nuevo-credito" element={<NuevoCreditoView />} />
             </Route>
             <Route element={<ProtectedRoute roles={['ADMIN', 'ANALYST', 'CASHIER']} />}>
+              <Route path="/inicio" element={<InicioView />} />
               <Route path="/clientes" element={<ClientesView />} />
             </Route>
             <Route element={<ProtectedRoute roles={['ADMIN', 'CASHIER']} />}>

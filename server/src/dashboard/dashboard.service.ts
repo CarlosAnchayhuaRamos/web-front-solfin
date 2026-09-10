@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ApprovalStatus, CreditStatus, PaymentStatus, UserRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { AuthTokenPayload } from '../auth/auth.types';
-import type { DashboardSummary } from './dashboard.types';
+import type { DashboardCash, DashboardPortfolio, DashboardSummary } from './dashboard.types';
 
 const demoOrganization = {
   clerkOrganizationId: 'org_demo_solfin',
@@ -16,17 +16,33 @@ export class DashboardService {
 
   async getSummary(user: AuthTokenPayload): Promise<DashboardSummary> {
     const organization = await this.getOrganization();
+    // Peru uses UTC-5 throughout the year, independently of the server timezone.
+    const now = new Date();
+    const peruDay = new Date(now.getTime() - 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const todayStart = new Date(`${peruDay}T00:00:00-05:00`);
+    const tomorrowStart = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+    if (user.role === UserRole.CASHIER) {
+      return { scope: 'OWN_CASH', generatedAt: now.toISOString(), portfolio: null,
+        cash: await this.getCashSummary(organization.id, user, todayStart, tomorrowStart) };
+    }
+    const portfolio = await this.getPortfolio(organization.id, user, todayStart, tomorrowStart);
+    if (user.role === UserRole.ANALYST) {
+      return { scope: 'ANALYST_PORTFOLIO', generatedAt: now.toISOString(), portfolio, cash: null };
+    }
+    return { scope: 'GENERAL', generatedAt: now.toISOString(), portfolio,
+      cash: await this.getCashSummary(organization.id, user, todayStart, tomorrowStart) };
+  }
+
+  private async getPortfolio(organizationId: string, user: AuthTokenPayload, todayStart: Date, tomorrowStart: Date): Promise<DashboardPortfolio> {
+    // Schedule dates are calendar days stored at UTC midnight, not event timestamps.
+    const dueDayStart = new Date(todayStart.toISOString().slice(0, 10));
+    const dueDayEnd = new Date(tomorrowStart.toISOString().slice(0, 10));
     const isAnalyst = user.role === UserRole.ANALYST;
     const creditWhere = {
       analystId: isAnalyst ? user.sub : undefined,
-      organizationId: organization.id,
+      organizationId,
       status: { in: [CreditStatus.ACTIVE, CreditStatus.OVERDUE] },
     };
-    const now = new Date();
-    const todayStart = new Date(now);
-    todayStart.setHours(0, 0, 0, 0);
-    const tomorrowStart = new Date(todayStart);
-    tomorrowStart.setDate(tomorrowStart.getDate() + 1);
 
     const [portfolio, overdueSchedules, activeCreditCount, overdueCreditCount, pendingApprovalCount, collectedToday, activeClients] = await Promise.all([
       this.prisma.paymentSchedule.aggregate({
@@ -37,7 +53,7 @@ export class DashboardService {
         _sum: { paidAmount: true, penalty: true, totalDue: true },
         where: {
           credit: creditWhere,
-          dueDate: { lt: todayStart },
+          dueDate: { lt: dueDayStart },
           status: { in: [PaymentStatus.PENDING, PaymentStatus.PARTIAL, PaymentStatus.OVERDUE] },
         },
       }),
@@ -45,7 +61,7 @@ export class DashboardService {
       this.prisma.credit.count({ where: { ...creditWhere, status: CreditStatus.OVERDUE } }),
       this.prisma.approvalRequest.count({
         where: {
-          organizationId: organization.id,
+          organizationId,
           requestedById: isAnalyst ? user.sub : undefined,
           status: ApprovalStatus.PENDING,
         },
@@ -53,7 +69,7 @@ export class DashboardService {
       this.prisma.payment.aggregate({
         _sum: { amount: true },
         where: {
-          credit: creditWhere,
+          credit: { organizationId, analystId: isAnalyst ? user.sub : undefined },
           paidAt: { gte: todayStart, lt: tomorrowStart },
         },
       }),
@@ -65,6 +81,15 @@ export class DashboardService {
 
     const portfolioAmount = this.getPendingAmount(portfolio._sum);
     const overdueAmount = this.getPendingAmount(overdueSchedules._sum);
+    const [dueToday, pendingDisbursementCount] = await Promise.all([
+      this.prisma.paymentSchedule.aggregate({
+        _sum: { paidAmount: true, penalty: true, totalDue: true },
+        _count: true,
+        where: { credit: creditWhere, dueDate: { gte: dueDayStart, lt: dueDayEnd },
+          status: { in: [PaymentStatus.PENDING, PaymentStatus.PARTIAL, PaymentStatus.OVERDUE] } },
+      }),
+      this.prisma.credit.count({ where: { organizationId, analystId: isAnalyst ? user.sub : undefined, status: CreditStatus.APPROVED } }),
+    ]);
 
     return {
       activeClientCount: activeClients.length,
@@ -76,7 +101,34 @@ export class DashboardService {
       overdueRate: portfolioAmount ? this.roundMoney((overdueAmount / portfolioAmount) * 100) : 0,
       pendingApprovalCount,
       portfolioAmount,
-      scope: isAnalyst ? 'ANALYST_PORTFOLIO' : 'GENERAL',
+      dueTodayAmount: this.getPendingAmount(dueToday._sum),
+      dueTodayCount: dueToday._count,
+      pendingDisbursementCount,
+    };
+  }
+
+  private async getCashSummary(organizationId: string, user: AuthTokenPayload, todayStart: Date, tomorrowStart: Date): Promise<DashboardCash> {
+    const isAdmin = user.role === UserRole.ADMIN;
+    const sessionWhere = { cashBox: { organizationId }, userId: isAdmin ? undefined : user.sub };
+    const [sessions, movements, vault] = await Promise.all([
+      this.prisma.cashSession.findMany({ where: { ...sessionWhere, status: 'OPEN' },
+        select: { id: true, openingAmount: true, openedAt: true, cashBox: { select: { name: true } }, user: { select: { fullName: true } } },
+        orderBy: { openedAt: 'asc' } }),
+      this.prisma.cashMovement.groupBy({ by: ['type'], _sum: { amount: true },
+        where: { cashSession: sessionWhere, createdAt: { gte: todayStart, lt: tomorrowStart },
+          type: { in: ['PAYMENT_COLLECTION', 'CREDIT_DISBURSEMENT'] } } }),
+      isAdmin ? this.prisma.vault.findFirst({ where: { organizationId, isActive: true }, select: { balance: true, openedAt: true } }) : null,
+    ]);
+    const balances = await this.prisma.cashMovement.groupBy({ by: ['cashSessionId', 'direction'], _sum: { amount: true },
+      where: { cashSession: { ...sessionWhere, status: 'OPEN' } } });
+    return {
+      vault: vault ? { balance: Number(vault.balance), isOpen: Boolean(vault.openedAt) } : null,
+      collectedToday: Number(movements.find((row) => row.type === 'PAYMENT_COLLECTION')?._sum.amount ?? 0),
+      disbursedToday: Number(movements.find((row) => row.type === 'CREDIT_DISBURSEMENT')?._sum.amount ?? 0),
+      sessions: sessions.map((session) => ({ id: session.id, name: session.cashBox.name, cashier: session.user.fullName,
+        openedAt: session.openedAt.toISOString(), balance: this.roundMoney(Number(session.openingAmount) + balances
+          .filter((row) => row.cashSessionId === session.id)
+          .reduce((total, row) => total + (row.direction === 'IN' ? 1 : -1) * Number(row._sum.amount ?? 0), 0)) })),
     };
   }
 

@@ -5,7 +5,7 @@ import type { AuthTokenPayload } from '../auth/auth.types';
 import { DashboardService } from './dashboard.service';
 
 @Controller('dashboard')
-@Roles(UserRole.ADMIN, UserRole.ANALYST)
+@Roles(UserRole.ADMIN, UserRole.ANALYST, UserRole.CASHIER)
 export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
 

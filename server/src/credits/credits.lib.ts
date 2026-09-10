@@ -14,7 +14,11 @@ export const limaDate = (now = new Date()) => {
 export const creditDueDate = (frequency: PaymentFrequency, installmentNo: number, base = limaDate()) => {
   const date = new Date(base);
   if (frequency === 'DAILY') {
-    date.setUTCDate(date.getUTCDate() + installmentNo);
+    let remaining = installmentNo;
+    while (remaining > 0) {
+      date.setUTCDate(date.getUTCDate() + 1);
+      if (date.getUTCDay() !== 0) remaining -= 1;
+    }
     return date;
   }
   if (frequency === 'WEEKLY') {

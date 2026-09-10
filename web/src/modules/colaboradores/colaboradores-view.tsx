@@ -138,11 +138,11 @@ export const ColaboradoresView: React.FC = () => {
         <div className="table-wrap">
           <table className="table">
             <thead>
-              <tr><th>Nombre</th><th>DNI</th><th>Correo</th><th>Rol</th><th>Cargo</th><th>Limite</th><th>Estado</th></tr>
+              <tr><th>Nombre</th><th>DNI</th><th>Correo</th><th>Rol</th><th>Cargo</th><th className="table__number">Limite</th><th>Estado</th></tr>
             </thead>
             <tbody>
               {users.map((user) => (
-                <tr className={selectedUser?.id === user.id ? 'table__row--selected' : undefined} key={user.id} onClick={() => setSelectedUser(user)}>
+                <tr data-interactive="true" className={selectedUser?.id === user.id ? 'table__row--selected' : undefined} key={user.id} onClick={() => setSelectedUser(user)}>
                   <td>{user.fullName}</td>
                   <td>{user.dni}</td>
                   <td>{user.email}</td>

@@ -1,4 +1,4 @@
-export interface DashboardSummary {
+export interface DashboardPortfolio {
   activeClientCount: number;
   activeCreditCount: number;
   averageTicket: number;
@@ -8,5 +8,21 @@ export interface DashboardSummary {
   overdueRate: number;
   pendingApprovalCount: number;
   portfolioAmount: number;
-  scope: 'GENERAL' | 'ANALYST_PORTFOLIO';
+  dueTodayAmount: number;
+  dueTodayCount: number;
+  pendingDisbursementCount: number;
+}
+
+export interface DashboardCash {
+  vault: { balance: number; isOpen: boolean } | null;
+  collectedToday: number;
+  disbursedToday: number;
+  sessions: Array<{ id: string; name: string; cashier: string; openedAt: string; balance: number }>;
+}
+
+export interface DashboardSummary {
+  scope: 'GENERAL' | 'ANALYST_PORTFOLIO' | 'OWN_CASH';
+  generatedAt: string;
+  portfolio: DashboardPortfolio | null;
+  cash: DashboardCash | null;
 }

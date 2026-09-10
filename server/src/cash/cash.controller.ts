@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Post, Put } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
-import { Roles } from '../auth/auth.decorators';
+import { CurrentUser, Roles } from '../auth/auth.decorators';
+import type { AuthTokenPayload } from '../auth/auth.types';
 import { CashService } from './cash.service';
 import type { AddCashSessionBalanceInput, AssignCashBoxInput, CloseCashSessionInput, CreateCashBoxInput, OpenCashSessionInput } from './cash.types';
 
@@ -38,8 +39,8 @@ export class CashController {
 
   @Post('vault/open')
   @Roles(UserRole.ADMIN)
-  openVault() {
-    return this.cashService.openVault();
+  openVault(@CurrentUser() user: AuthTokenPayload) {
+    return this.cashService.openVault(user.sub);
   }
 
   @Post('vault/close')
@@ -54,18 +55,18 @@ export class CashController {
   }
 
   @Post('sessions/open')
-  openCashSession(@Body() input: OpenCashSessionInput) {
-    return this.cashService.openCashSession(input);
+  openCashSession(@Body() input: OpenCashSessionInput, @CurrentUser() user: AuthTokenPayload) {
+    return this.cashService.openCashSession(input, user.sub);
   }
 
   @Post('sessions/:id/close')
-  closeCashSession(@Param('id') id: string, @Body() input: CloseCashSessionInput) {
-    return this.cashService.closeCashSession(id, input);
+  closeCashSession(@Param('id') id: string, @Body() input: CloseCashSessionInput, @CurrentUser() user: AuthTokenPayload) {
+    return this.cashService.closeCashSession(id, input, user.sub);
   }
 
   @Post('sessions/:id/add-balance')
   @Roles(UserRole.ADMIN)
-  addCashSessionBalance(@Param('id') id: string, @Body() input: AddCashSessionBalanceInput) {
-    return this.cashService.addCashSessionBalance(id, input);
+  addCashSessionBalance(@Param('id') id: string, @Body() input: AddCashSessionBalanceInput, @CurrentUser() user: AuthTokenPayload) {
+    return this.cashService.addCashSessionBalance(id, { ...input, userId: user.sub });
   }
 }

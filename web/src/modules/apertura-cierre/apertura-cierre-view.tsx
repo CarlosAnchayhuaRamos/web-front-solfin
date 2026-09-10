@@ -177,6 +177,7 @@ export const AperturaCierreView: React.FC = () => {
             <Card>
               <CardHeader description="El administrador abre boveda antes de que caja reciba efectivo." title="Apertura de boveda" />
               <CardBody>
+                <p>Saldo disponible: {cash.vaultBalance === null ? '-' : formatMoney(cash.vaultBalance)}</p>
                 <div className="metric-row">
                   <span>Estado</span>
                   <Badge color={cash.isVaultOpen ? 'black' : 'yellow'}>{cash.isVaultOpen ? 'Abierta' : 'Pendiente'}</Badge>
@@ -193,7 +194,7 @@ export const AperturaCierreView: React.FC = () => {
                           <th>Caja no cerrada</th>
                           <th>Cajero</th>
                           <th>Apertura</th>
-                          <th>Monto inicial</th>
+                          <th className="table__number">Monto inicial</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -272,7 +273,7 @@ export const AperturaCierreView: React.FC = () => {
                     <thead>
                       <tr>
                         <th>Caja</th>
-                        <th>Saldo</th>
+                        <th className="table__number">Saldo</th>
                         <th>Adicionar saldo</th>
                       </tr>
                     </thead>
@@ -429,9 +430,9 @@ export const AperturaCierreView: React.FC = () => {
               <th>Caja</th>
               <th>Cajero</th>
               <th>Apertura</th>
-              <th>Esperado</th>
-              <th>Contado</th>
-              <th>Diferencia</th>
+              <th className="table__number">Esperado</th>
+              <th className="table__number">Contado</th>
+              <th className="table__number">Diferencia</th>
               <th>Denominaciones</th>
               <th>Estado</th>
             </tr>

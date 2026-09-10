@@ -25,7 +25,7 @@ test('capped and fixed mora preserve history after abonos', () => {
 test('due dates use Lima, clamp end of month, preserve first installment rule', () => {
   const base = limaDate(new Date('2026-02-01T02:00:00Z'));
   expect(base.toISOString().slice(0, 10)).toBe('2026-01-31');
-  expect(creditDueDate('DAILY', 1, base).toISOString().slice(0, 10)).toBe('2026-02-01');
+  expect(creditDueDate('DAILY', 1, base).toISOString().slice(0, 10)).toBe('2026-02-02');
   expect(creditDueDate('WEEKLY', 1, base)).toEqual(base);
   expect(creditDueDate('MONTHLY', 1, base)).toEqual(base);
   expect(creditDueDate('MONTHLY', 2, base).toISOString().slice(0, 10)).toBe('2026-02-28');
@@ -53,6 +53,13 @@ test('disabled and deleted users lose access even with valid tokens; roles use D
   db.appUser.findUnique.mockResolvedValue({ isActive: true, role: 'CASHIER' });
   await expect(guard.canActivate(context)).rejects.toThrow('No autorizado');
   expect(() => guard.verifyToken(token({ sub: 'a', role: 'ADMIN' }))).toThrow();
+});
+
+test('daily due dates skip Sundays across weeks and preserve the supplied base', () => {
+  const base = new Date('2026-01-31T00:00:00Z');
+  expect(creditDueDate('DAILY', 6, base).toISOString().slice(0, 10)).toBe('2026-02-07');
+  expect(creditDueDate('DAILY', 7, base).toISOString().slice(0, 10)).toBe('2026-02-09');
+  expect(base.toISOString().slice(0, 10)).toBe('2026-01-31');
 });
 
 test('bootstrap leaves existing accounts untouched', async () => {

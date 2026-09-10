@@ -21,6 +21,5 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ roles }) => {
 };
 
 const getFallbackPath = (role: AppRole | undefined) => {
-  if (role === 'CASHIER') return '/clientes';
   return '/inicio';
 };

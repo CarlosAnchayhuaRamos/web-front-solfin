@@ -1,5 +1,13 @@
 const { ClientsService } = require('../../src/clients/clients.service');
 
+test('birth dates reject impossible dates instead of rolling into another month', () => {
+  const service = new ClientsService({});
+  expect(service.toDate('2000-02-29').toISOString().slice(0, 10)).toBe('2000-02-29');
+  expect(() => service.toDate('2001-02-29')).toThrow('Fecha de nacimiento invalida');
+  expect(() => service.toDate('31-12-2000')).toThrow('Fecha de nacimiento invalida');
+  expect(service.toDate('')).toBeNull();
+});
+
 test('pagination bounds and name filters are applied before loading clients', async () => {
   const tx = {
     client: { count: jest.fn(async () => 60), findMany: jest.fn(async () => []) },

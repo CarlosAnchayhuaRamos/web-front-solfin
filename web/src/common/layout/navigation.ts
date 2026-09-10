@@ -1,7 +1,7 @@
 import type { AppRole } from '../auth/AuthProvider';
 
 export const navigationItems = [
-  { code: 'IN', label: 'Inicio', path: '/inicio', roles: ['ADMIN', 'ANALYST'] },
+  { code: 'IN', label: 'Inicio', path: '/inicio', roles: ['ADMIN', 'ANALYST', 'CASHIER'] },
   { code: 'SO', label: 'Solicitudes', path: '/solicitudes', roles: ['ADMIN'] },
   { code: 'NC', label: 'Nuevo credito', path: '/nuevo-credito', roles: ['ADMIN', 'ANALYST'] },
   { code: 'CL', label: 'Clientes', path: '/clientes', roles: ['ADMIN', 'ANALYST', 'CASHIER'] },

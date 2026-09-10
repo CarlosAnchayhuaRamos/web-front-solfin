@@ -52,8 +52,9 @@ describe('clientes lib', () => {
   });
 
   it('normalizes typed date input without native calendar', () => {
-    expect(normalizeDateInput('19900125')).toBe('1990-01-25');
-    expect(normalizeDateInput('1990-01')).toBe('1990-01');
-    expect(normalizeDateInput('1990/01/25')).toBe('1990-01-25');
+    expect(normalizeDateInput('25011990')).toBe('25-01-1990');
+    expect(normalizeDateInput('25-01')).toBe('25-01');
+    expect(normalizeDateInput('25/01/1990')).toBe('25-01-1990');
+    expect(toClientPayload(form({ birthDate: '25-01-1990' })).birthDate).toBe('1990-01-25');
   });
 });

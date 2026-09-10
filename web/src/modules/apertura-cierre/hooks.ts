@@ -19,6 +19,7 @@ export const useCashSessions = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isVaultOpen, setIsVaultOpen] = useState(false);
+  const [vaultBalance, setVaultBalance] = useState<number | null>(null);
   const [boxes, setBoxes] = useState<CashBox[] | null>(null);
   const [cashiers, setCashiers] = useState<Cashier[] | null>(null);
   const [sessions, setSessions] = useState<CashSession[] | null>(null);
@@ -57,9 +58,10 @@ export const useCashSessions = () => {
         return false;
       }
 
-      const vault = (await vaultResponse.json()) as { isOpen: boolean };
+      const vault = (await vaultResponse.json()) as { isOpen: boolean; balance: number };
 
       setIsVaultOpen(vault.isOpen);
+      setVaultBalance(vault.balance);
       setBoxes((await boxesResponse.json()) as CashBox[]);
       setCashiers((await cashiersResponse.json()) as Cashier[]);
       setSessions((await sessionsResponse.json()) as CashSession[]);
@@ -88,6 +90,7 @@ export const useCashSessions = () => {
       }
 
       setIsVaultOpen(true);
+      await fetchSessions();
       return true;
     } catch {
       setError('No se pudo conectar con el backend');
@@ -95,7 +98,7 @@ export const useCashSessions = () => {
     } finally {
       setIsSaving(false);
     }
-  }, []);
+  }, [fetchSessions]);
 
   const closeVault = useCallback(async () => {
     setError(null);
@@ -114,6 +117,7 @@ export const useCashSessions = () => {
 
       const result = (await response.json()) as { report: VaultCloseReport };
       setIsVaultOpen(false);
+      await fetchSessions();
       return result.report;
     } catch {
       setError('No se pudo conectar con el backend');
@@ -121,7 +125,7 @@ export const useCashSessions = () => {
     } finally {
       setIsSaving(false);
     }
-  }, []);
+  }, [fetchSessions]);
 
   const openCashSession = useCallback(async (
     cashBoxName: string,
@@ -146,6 +150,7 @@ export const useCashSessions = () => {
 
       const session = (await response.json()) as CashSession;
       setSessions((currentSessions) => [session, ...(currentSessions ?? [])]);
+      await fetchSessions();
       return true;
     } catch {
       setError('No se pudo conectar con el backend');
@@ -153,7 +158,7 @@ export const useCashSessions = () => {
     } finally {
       setIsSaving(false);
     }
-  }, []);
+  }, [fetchSessions]);
 
   const createCashBox = useCallback(async (name: string) => {
     setError(null);
@@ -227,6 +232,7 @@ export const useCashSessions = () => {
 
       const result = (await response.json()) as { report: CashCloseReport; session: CashSession };
       setSessions((currentSessions) => (currentSessions ?? []).map((currentSession) => (currentSession.id === result.session.id ? result.session : currentSession)));
+      await fetchSessions();
       return result.report;
     } catch {
       setError('No se pudo conectar con el backend');
@@ -234,7 +240,7 @@ export const useCashSessions = () => {
     } finally {
       setIsSaving(false);
     }
-  }, []);
+  }, [fetchSessions]);
 
   const addCashSessionBalance = useCallback(async (sessionId: string, amount: number, userId: string) => {
     setError(null);
@@ -254,6 +260,7 @@ export const useCashSessions = () => {
 
       const session = (await response.json()) as CashSession;
       setSessions((currentSessions) => (currentSessions ?? []).map((currentSession) => (currentSession.id === session.id ? session : currentSession)));
+      await fetchSessions();
       return true;
     } catch {
       setError('No se pudo conectar con el backend');
@@ -261,7 +268,7 @@ export const useCashSessions = () => {
     } finally {
       setIsSaving(false);
     }
-  }, []);
+  }, [fetchSessions]);
 
   useEffect(() => {
     void fetchSessions();
@@ -279,6 +286,7 @@ export const useCashSessions = () => {
     isLoading,
     isSaving,
     isVaultOpen,
+    vaultBalance,
     openCashSession,
     openVault,
     refetch: fetchSessions,

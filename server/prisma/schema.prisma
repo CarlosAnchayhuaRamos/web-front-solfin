@@ -199,6 +199,14 @@ model Client {
   email               String?
   personalAddress     String?
   businessAddress     String?
+  personalAddressReference String?
+  businessAddressReference String?
+  referenceName       String?
+  referencePhone      String?
+  businessRuc         String?
+  businessName        String?
+  businessPhone       String?
+  businessActivity    String?
   birthDate           DateTime?
   district            String?
   province            String?

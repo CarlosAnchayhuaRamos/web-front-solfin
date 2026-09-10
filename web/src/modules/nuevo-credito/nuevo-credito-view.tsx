@@ -155,7 +155,7 @@ export const NuevoCreditoView: React.FC = () => {
           <div className="card__body message--success">{successMessage}</div>
         </div>
       ) : null}
-      <section className="grid grid--two">
+      <section className="grid">
         <Card>
           <CardHeader
             action={
@@ -167,7 +167,7 @@ export const NuevoCreditoView: React.FC = () => {
             title="Solicitud de credito"
           />
           <CardBody>
-            <form className="form-grid">
+            <form className="form-grid credit-request-form">
               <div className="field">
                 <label htmlFor="client">Cliente</label>
                 <div className="combobox">
@@ -175,6 +175,7 @@ export const NuevoCreditoView: React.FC = () => {
                     aria-autocomplete="list"
                     aria-expanded={isClientComboboxOpen}
                     aria-controls="client-options"
+                    className={selectedClient?.isSpecial ? 'credit-request-form__exclusive-client' : undefined}
                     id="client"
                     onBlur={() => window.setTimeout(() => setIsClientComboboxOpen(false), 120)}
                     onChange={(event) => handleChange('clientSearch', event.target.value)}
@@ -183,7 +184,6 @@ export const NuevoCreditoView: React.FC = () => {
                     role="combobox"
                     value={form.clientSearch}
                   />
-                  {selectedClient ? <Badge color="blue">Cliente seleccionado</Badge> : null}
                   {isClientComboboxOpen ? (
                     <div className="combobox__panel" id="client-options" role="listbox">
                       {filteredClients.length ? (
@@ -234,18 +234,6 @@ export const NuevoCreditoView: React.FC = () => {
                 />
               </div>
               <div className="field">
-                <label htmlFor="installments">Cuotas</label>
-                <input
-                  id="installments"
-                  min="1"
-                  onChange={(event) => handleChange('installments', event.target.value)}
-                  placeholder="6"
-                  step="1"
-                  type="number"
-                  value={form.installments}
-                />
-              </div>
-              <div className="field">
                 <label htmlFor="paymentFrequency">Frecuencia de pago</label>
                 <select
                   id="paymentFrequency"
@@ -260,17 +248,28 @@ export const NuevoCreditoView: React.FC = () => {
                 </select>
               </div>
               <div className="field">
+                <label htmlFor="installments">Cuotas</label>
+                <input
+                  id="installments"
+                  min="1"
+                  onChange={(event) => handleChange('installments', event.target.value)}
+                  placeholder="6"
+                  step="1"
+                  type="number"
+                  value={form.installments}
+                />
+              </div>
+              <div className="field">
                 <label htmlFor="interestRate">Tasa interes mensual (%)</label>
                 <input
                   id="interestRate"
                   min="0"
                   onChange={(event) => handleChange('interestRate', event.target.value)}
-                  placeholder={selectedClient?.isSpecial ? 'Interes especial' : 'Interes general'}
+                  placeholder="0.000"
                   step="0.001"
                   type="number"
                   value={form.interestRate}
                 />
-                <span>{selectedClient?.isSpecial ? 'Cliente especial' : 'Cliente general'}</span>
               </div>
               <div className="field">
                 <label htmlFor="interestCalculationMethod">Tipo de interes</label>
@@ -334,9 +333,9 @@ export const NuevoCreditoView: React.FC = () => {
                     <tr>
                       <th>Cuota</th>
                       <th>Vence</th>
-                      <th>Capital</th>
-                      <th>Interes</th>
-                      <th>Total</th>
+                      <th className="table__number">Capital</th>
+                      <th className="table__number">Interes</th>
+                      <th className="table__number">Total</th>
                     </tr>
                   </thead>
                   <tbody>

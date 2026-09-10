@@ -147,8 +147,8 @@ export const SolicitudesView: React.FC = () => {
                   <th>Cliente</th>
                   <th>Analista</th>
                   <th>Tipo</th>
-                  <th>Monto</th>
-                  <th>Limite</th>
+                  <th className="table__number">Monto</th>
+                  <th className="table__number">Limite</th>
                   <th>Estado</th>
                   <th>Fecha</th>
                   <th>Archivos</th>

@@ -18,6 +18,7 @@ export const AppSidebar: React.FC = () => {
         {visibleItems.map((item) => (
           <NavLink
             className={({ isActive }) => cn('sidebar__link', isActive && 'sidebar__link--active')}
+            data-module={item.code}
             key={item.path}
             to={item.path}
           >

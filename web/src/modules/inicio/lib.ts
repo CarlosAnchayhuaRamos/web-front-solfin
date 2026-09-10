@@ -1,40 +1,28 @@
 import { formatMoney } from '../../common/lib/format';
-import type { DashboardMetric, DashboardSummary, WorkQueueItem } from './types';
+import type { DashboardCash, DashboardMetric, DashboardPortfolio, DashboardSummary } from './types';
 
-export const getQueueColor = (item: WorkQueueItem) => {
-  if (item.status === 'Urgente') return 'red';
-  if (item.status === 'Pendiente') return 'yellow';
-  return 'blue';
+export const getDashboardMetrics = (portfolio: DashboardPortfolio): DashboardMetric[] => [
+  { id: 'portfolio', label: 'Cartera pendiente', value: formatMoney(portfolio.portfolioAmount), trend: `${portfolio.activeCreditCount} creditos vigentes` },
+  { id: 'overdue', label: 'Saldo vencido', value: formatMoney(portfolio.overdueAmount), trend: `${portfolio.overdueRate.toFixed(1)}% de la cartera pendiente` },
+  { id: 'collections', label: 'Cobrado hoy', value: formatMoney(portfolio.collectedToday), trend: 'Pagos recibidos en la cartera' },
+  { id: 'due', label: 'Por cobrar hoy', value: formatMoney(portfolio.dueTodayAmount), trend: `${portfolio.dueTodayCount} cuotas con vencimiento hoy` },
+];
+
+export const getCashMetrics = (cash: DashboardCash): DashboardMetric[] => [
+  { id: 'balance', label: 'Saldo en cajas abiertas', value: formatMoney(cash.sessions.reduce((total, session) => total + session.balance, 0)), trend: `${cash.sessions.length} cajas abiertas` },
+  { id: 'income', label: 'Cobros de hoy', value: formatMoney(cash.collectedToday), trend: 'Ingresos por pagos de creditos' },
+  { id: 'expenses', label: 'Desembolsos de hoy', value: formatMoney(cash.disbursedToday), trend: 'Egresos por entrega de creditos' },
+];
+
+export const getDashboardScopeLabel = (summary: DashboardSummary) => {
+  if (summary.scope === 'ANALYST_PORTFOLIO') return 'Analista / Mi cartera';
+  if (summary.scope === 'OWN_CASH') return 'Caja / Mis operaciones';
+  return 'Administrador / Resumen general';
 };
 
-export const getDashboardMetrics = (summary: DashboardSummary): DashboardMetric[] => {
-  return [
-    {
-      id: 'portfolio',
-      label: 'Cartera vigente',
-      trend: `${summary.activeCreditCount} creditos en gestion`,
-      value: formatMoney(summary.portfolioAmount),
-    },
-    {
-      id: 'overdue',
-      label: 'Mora total',
-      trend: `${summary.overdueCreditCount} creditos vencidos`,
-      value: formatPercent(summary.overdueRate),
-    },
-    {
-      id: 'collections',
-      label: 'Cobrado hoy',
-      trend: `Ticket promedio ${formatMoney(summary.averageTicket)}`,
-      value: formatMoney(summary.collectedToday),
-    },
-    {
-      id: 'requests',
-      label: 'Solicitudes pendientes',
-      trend: 'Requieren revision',
-      value: String(summary.pendingApprovalCount),
-    },
-  ];
-};
+export const formatDashboardDate = (value: string) => new Date(value).toLocaleString('es-PE', {
+  timeZone: 'America/Lima', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+});
 
 export const getApiErrorMessage = async (response: Response) => {
   try {
@@ -44,13 +32,4 @@ export const getApiErrorMessage = async (response: Response) => {
   } catch {
     return 'No se pudo completar la operacion';
   }
-};
-
-export const getDashboardScopeLabel = (summary: DashboardSummary) => {
-  if (summary.scope === 'ANALYST_PORTFOLIO') return 'Tu cartera asignada';
-  return 'Vista general del negocio';
-};
-
-const formatPercent = (value: number) => {
-  return `${value.toFixed(1)}%`;
 };

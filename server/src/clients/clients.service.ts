@@ -75,6 +75,14 @@ export class ClientsService {
     try {
       const client = await this.prisma.client.create({
         data: {
+          personalAddressReference: this.emptyToNull(input.personalAddressReference),
+          businessAddressReference: this.emptyToNull(input.businessAddressReference),
+          referenceName: this.emptyToNull(input.referenceName),
+          referencePhone: this.emptyToNull(input.referencePhone),
+          businessRuc: this.emptyToNull(input.businessRuc),
+          businessName: this.emptyToNull(input.businessName),
+          businessPhone: this.emptyToNull(input.businessPhone),
+          businessActivity: this.emptyToNull(input.businessActivity),
           birthDate: this.toDate(input.birthDate),
           businessAddress: this.emptyToNull(input.businessAddress),
           department: this.emptyToNull(input.department),
@@ -114,6 +122,14 @@ export class ClientsService {
     try {
       const client = await this.prisma.client.update({
         data: {
+          personalAddressReference: input.personalAddressReference === undefined ? undefined : this.emptyToNull(input.personalAddressReference),
+          businessAddressReference: input.businessAddressReference === undefined ? undefined : this.emptyToNull(input.businessAddressReference),
+          referenceName: this.emptyToNull(input.referenceName),
+          referencePhone: this.emptyToNull(input.referencePhone),
+          businessRuc: this.emptyToNull(input.businessRuc),
+          businessName: this.emptyToNull(input.businessName),
+          businessPhone: this.emptyToNull(input.businessPhone),
+          businessActivity: this.emptyToNull(input.businessActivity),
           birthDate: this.toDate(input.birthDate),
           businessAddress: this.emptyToNull(input.businessAddress),
           department: this.emptyToNull(input.department),
@@ -168,6 +184,10 @@ export class ClientsService {
   }
 
   private validateCreateInput(input: CreateClientInput) {
+    if (input.businessRuc?.trim() && !/^\d{11}$/.test(input.businessRuc.trim())) {
+      throw new BadRequestException('El RUC debe tener 11 digitos');
+    }
+    this.toDate(input.birthDate);
     if (!input.firstName?.trim()) {
       throw new BadRequestException('El nombre es obligatorio');
     }
@@ -200,10 +220,26 @@ export class ClientsService {
 
   private toDate(value: string | undefined) {
     if (!value?.trim()) return null;
-    return new Date(`${value.trim()}T00:00:00.000Z`);
+    const date = new Date(`${value.trim()}T00:00:00.000Z`);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value.trim()) || !Number.isFinite(date.getTime())
+      || date.toISOString().slice(0, 10) !== value.trim() || date > new Date()) {
+      throw new BadRequestException('Fecha de nacimiento invalida');
+    }
+    return date;
   }
 
   private toListItem(client: {
+    personalAddressReference: string | null;
+    businessAddressReference: string | null;
+    referenceName: string | null;
+    referencePhone: string | null;
+    businessRuc: string | null;
+    businessName: string | null;
+    businessPhone: string | null;
+    businessActivity: string | null;
+    department: string | null;
+    province: string | null;
+    district: string | null;
     _count: { credits: number };
     credits: Array<{ totalAmount: Prisma.Decimal }>;
     dni: string;
@@ -225,6 +261,17 @@ export class ClientsService {
 
     return {
       activeCredits: client._count.credits,
+      referenceName: client.referenceName,
+      personalAddressReference: client.personalAddressReference,
+      businessAddressReference: client.businessAddressReference,
+      referencePhone: client.referencePhone,
+      businessRuc: client.businessRuc,
+      businessName: client.businessName,
+      businessPhone: client.businessPhone,
+      businessActivity: client.businessActivity,
+      department: client.department,
+      province: client.province,
+      district: client.district,
       dni: client.dni,
       email: client.email,
       birthDate: client.birthDate?.toISOString().slice(0, 10) ?? null,

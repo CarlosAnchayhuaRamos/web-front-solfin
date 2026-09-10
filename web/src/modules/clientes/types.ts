@@ -1,4 +1,15 @@
 export interface Client {
+  referenceName: string | null;
+  personalAddressReference: string | null;
+  businessAddressReference: string | null;
+  referencePhone: string | null;
+  businessRuc: string | null;
+  businessName: string | null;
+  businessPhone: string | null;
+  businessActivity: string | null;
+  department: string | null;
+  province: string | null;
+  district: string | null;
   id: string;
   firstName: string;
   lastName: string;
@@ -21,6 +32,17 @@ export type PaymentFrequency = 'DAILY' | 'WEEKLY' | 'MONTHLY';
 export type InterestCalculationMethod = 'CONTINUOUS' | 'EQUAL_INSTALLMENTS';
 
 export interface CreateClientInput {
+  referenceName: string;
+  personalAddressReference: string;
+  businessAddressReference: string;
+  referencePhone: string;
+  businessRuc: string;
+  businessName: string;
+  businessPhone: string;
+  businessActivity: string;
+  department: string;
+  province: string;
+  district: string;
   firstName: string;
   lastName: string;
   dni: string;

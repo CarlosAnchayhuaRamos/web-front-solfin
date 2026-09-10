@@ -1,11 +1,4 @@
-export interface DashboardMetric {
-  id: string;
-  label: string;
-  value: string;
-  trend: string;
-}
-
-export interface DashboardSummary {
+export interface DashboardPortfolio {
   activeClientCount: number;
   activeCreditCount: number;
   averageTicket: number;
@@ -15,12 +8,34 @@ export interface DashboardSummary {
   overdueRate: number;
   pendingApprovalCount: number;
   portfolioAmount: number;
-  scope: 'GENERAL' | 'ANALYST_PORTFOLIO';
+  dueTodayAmount: number;
+  dueTodayCount: number;
+  pendingDisbursementCount: number;
 }
 
-export interface WorkQueueItem {
+export interface DashboardCash {
+  vault: { balance: number; isOpen: boolean } | null;
+  collectedToday: number;
+  disbursedToday: number;
+  sessions: Array<{ id: string; name: string; cashier: string; openedAt: string; balance: number }>;
+}
+
+export interface DashboardSummary {
+  scope: 'GENERAL' | 'ANALYST_PORTFOLIO' | 'OWN_CASH';
+  generatedAt: string;
+  portfolio: DashboardPortfolio | null;
+  cash: DashboardCash | null;
+}
+
+export interface DashboardMetric {
   id: string;
-  title: string;
-  description: string;
-  status: 'Urgente' | 'Pendiente' | 'Normal';
+  label: string;
+  value: string;
+  trend: string;
+}
+
+export interface DashboardAction {
+  path: string;
+  label: string;
+  roles: readonly string[];
 }

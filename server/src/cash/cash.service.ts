@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { randomUUID } from 'crypto';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type {
   AddCashSessionBalanceInput,
@@ -20,10 +21,6 @@ const demoOrganization = {
   clerkOrganizationId: 'org_demo_solfin',
   name: 'SOLFIN PERU',
   ruc: '20600000001',
-};
-
-const adminUser = {
-  id: 'user_demo_admin',
 };
 
 const defaultCashBoxes = ['Caja principal', 'Caja auxiliar'];
@@ -205,7 +202,7 @@ export class CashService {
     return this.toCashBoxDto(box);
   }
 
-  async openVault(): Promise<VaultOpeningDto> {
+  async openVault(userId: string): Promise<VaultOpeningDto> {
     const organization = await this.getOrganization();
     await this.ensureCashSetup(organization.id);
 
@@ -218,7 +215,7 @@ export class CashService {
         WHERE "organizationId" = $2::uuid AND name = $3
         RETURNING name, balance, "openedAt"
       `,
-      adminUser.id,
+      userId,
       organization.id,
       defaultVaultName,
     );
@@ -234,6 +231,8 @@ export class CashService {
   async closeVault(): Promise<CloseVaultResultDto> {
     const organization = await this.getOrganization();
     await this.ensureCashSetup(organization.id);
+    const vault = await this.prisma.$transaction(async (tx) => {
+    const locked = await this.lockVault(tx, organization.id, false);
     const unclosedCashBoxes = await this.findUnclosedCashBoxes(organization.id);
 
     if (unclosedCashBoxes.length) {
@@ -243,20 +242,9 @@ export class CashService {
       });
     }
 
+    return tx.vault.update({ where: { id: locked.id }, data: { openedAt: null, openedByUserId: null } });
+    });
     const reports = await this.findTodayCashCloseReports(organization.id);
-    const vaults = await this.prisma.$queryRawUnsafe<VaultRecord[]>(
-      `
-        UPDATE vaults
-        SET "openedAt" = NULL,
-            "openedByUserId" = NULL,
-            "updatedAt" = now()
-        WHERE "organizationId" = $1::uuid AND name = $2
-        RETURNING name, balance, "openedAt"
-      `,
-      organization.id,
-      defaultVaultName,
-    );
-    const vault = vaults[0];
 
     return {
       report: {
@@ -300,7 +288,7 @@ export class CashService {
     };
   }
 
-  async openCashSession(input: OpenCashSessionInput): Promise<CashSessionDto> {
+  async openCashSession(input: OpenCashSessionInput, actorId: string): Promise<CashSessionDto> {
     this.validateOpenCashSession(input);
 
     const organization = await this.getOrganization();
@@ -341,6 +329,10 @@ export class CashService {
     if (!responsible) {
       throw new BadRequestException('Usuario de caja no autorizado');
     }
+    const actor = await this.prisma.appUser.findFirst({ where: { id: actorId, isActive: true, organizationId: organization.id } });
+    if (!actor || (actor.role !== 'ADMIN' && actor.id !== input.userId)) {
+      throw new BadRequestException('No puede abrir caja para otro usuario');
+    }
 
     if (responsible.role !== 'ADMIN' && cashBox.assignedUserId !== input.userId) {
       throw new BadRequestException('La caja no esta asignada al cajero');
@@ -352,7 +344,15 @@ export class CashService {
       throw new BadRequestException('El efectivo de apertura supera el maximo permitido');
     }
 
-    const sessions = await this.prisma.$queryRawUnsafe<CashSessionRecord[]>(
+    return this.prisma.$transaction(async (tx) => {
+    const vault = await this.lockVault(tx, organization.id);
+    if (Number(vault.balance) < input.openingAmount) throw new BadRequestException('Saldo insuficiente en boveda');
+    await tx.$queryRaw`SELECT id FROM cash_boxes WHERE id = ${cashBox.id}::uuid FOR UPDATE`;
+    const active = await tx.cashSession.count({ where: { status: 'OPEN', OR: [
+      { cashBoxId: cashBox.id }, { userId: input.userId },
+    ] } });
+    if (active) throw new BadRequestException('La caja o el cajero ya tiene una sesion abierta');
+    const sessions = await tx.$queryRawUnsafe<CashSessionRecord[]>(
       `
         INSERT INTO cash_sessions (
           id,
@@ -388,19 +388,29 @@ export class CashService {
       responsible.fullName,
     );
 
+    await tx.vault.update({ where: { id: vault.id }, data: { balance: { decrement: input.openingAmount } } });
+    await tx.auditLog.create({ data: {
+      organizationId: organization.id, actorId, entity: 'Vault', entityId: vault.id,
+      action: 'CASH_OPEN', after: { cashSessionId: sessions[0].id, amount: input.openingAmount, direction: 'OUT' },
+    } });
     return this.toSessionDto(sessions[0]);
+    });
   }
 
-  async closeCashSession(id: string, input: CloseCashSessionInput): Promise<CloseCashSessionResultDto> {
+  async closeCashSession(id: string, input: CloseCashSessionInput, actorId: string): Promise<CloseCashSessionResultDto> {
     this.validateCloseCashSession(input);
 
     const organization = await this.getOrganization();
     await this.ensureCashSetup(organization.id);
     const maxCashDifference = await this.getMaxCashDifference(organization.id);
+    const actor = await this.prisma.appUser.findFirst({ where: { id: actorId, isActive: true, organizationId: organization.id } });
+    if (!actor) throw new BadRequestException('Usuario de caja no autorizado');
     const session = await this.prisma.$transaction(async (tx) => {
+      const vault = await this.lockVault(tx, organization.id);
       await tx.$queryRaw`SELECT id FROM cash_sessions WHERE id = ${id}::uuid FOR UPDATE`;
       const openSession = await tx.cashSession.findFirst({ where: { id, status: 'OPEN', cashBox: { organizationId: organization.id } } });
       if (!openSession) throw new BadRequestException('La caja abierta no existe');
+      if (actor.role !== 'ADMIN' && openSession.userId !== actorId) throw new BadRequestException('No puede cerrar la caja de otro usuario');
       const totals = await tx.cashMovement.groupBy({ by: ['direction'], where: { cashSessionId: id }, _sum: { amount: true } });
       const expectedAmount = this.roundMoney(Number(openSession.openingAmount) + totals.reduce((total, row) => {
         const amount = Number(row._sum.amount ?? 0);
@@ -453,6 +463,11 @@ export class CashService {
       if (!session) {
         throw new BadRequestException('La caja abierta no existe');
       }
+      await tx.vault.update({ where: { id: vault.id }, data: { balance: { increment: input.countedAmount } } });
+      await tx.auditLog.create({ data: {
+        organizationId: organization.id, actorId, entity: 'Vault', entityId: vault.id,
+        action: 'CASH_CLOSE', after: { cashSessionId: id, amount: input.countedAmount, direction: 'IN', difference },
+      } });
       return session;
     });
 
@@ -504,15 +519,22 @@ export class CashService {
       throw new BadRequestException('La boveda debe estar abierta');
     }
 
-    const currentAmount = await this.getExpectedCashSessionAmount(id, organization.id);
     const maxCashBoxBalance = await this.getMaxCashBoxBalance(organization.id);
+    await this.prisma.$transaction(async (tx) => {
+    const vault = await this.lockVault(tx, organization.id);
+    await tx.$queryRaw`SELECT id FROM cash_sessions WHERE id = ${id}::uuid FOR UPDATE`;
+    const session = await tx.cashSession.findFirst({ where: { id, status: 'OPEN', cashBox: { organizationId: organization.id } } });
+    if (!session) throw new BadRequestException('La caja abierta no existe');
+    const totals = await tx.cashMovement.groupBy({ by: ['direction'], where: { cashSessionId: id }, _sum: { amount: true } });
+    const currentAmount = Number(session.openingAmount) + totals.reduce((sum, row) =>
+      sum + (row.direction === 'IN' ? 1 : -1) * Number(row._sum.amount ?? 0), 0);
+    if (Number(vault.balance) < amount) throw new BadRequestException('Saldo insuficiente en boveda');
 
     if (currentAmount + amount > maxCashBoxBalance) {
       throw new BadRequestException(`El saldo supera el maximo de caja de S/ ${maxCashBoxBalance}`);
     }
 
-    const vault = await this.ensureVault(organization.id);
-    await this.prisma.cashMovement.create({
+    await tx.cashMovement.create({
       data: {
         amount,
         cashSessionId: id,
@@ -523,6 +545,12 @@ export class CashService {
         userId: responsible.id,
         vaultId: vault.id,
       },
+    });
+    await tx.vault.update({ where: { id: vault.id }, data: { balance: { decrement: amount } } });
+    await tx.auditLog.create({ data: {
+      organizationId: organization.id, actorId: responsible.id, entity: 'Vault', entityId: vault.id,
+      action: 'CASH_TOPUP', after: { cashSessionId: id, amount, direction: 'OUT' },
+    } });
     });
 
     const sessions = await this.findSessions();
@@ -567,7 +595,7 @@ export class CashService {
   private async ensureVault(organizationId: string) {
     return this.prisma.vault.upsert({
       create: {
-        balance: 0,
+        balance: 30000,
         name: defaultVaultName,
         organizationId,
       },
@@ -579,6 +607,13 @@ export class CashService {
         },
       },
     });
+  }
+
+  private async lockVault(tx: Prisma.TransactionClient, organizationId: string, requireOpen = true) {
+    await tx.$queryRaw`SELECT id FROM vaults WHERE "organizationId" = ${organizationId}::uuid AND name = ${defaultVaultName} FOR UPDATE`;
+    const vault = await tx.vault.findUnique({ where: { organizationId_name: { organizationId, name: defaultVaultName } } });
+    if (!vault || (requireOpen && !vault.openedAt)) throw new BadRequestException('La boveda debe estar abierta');
+    return vault;
   }
 
   private async findCashierById(organizationId: string, cashierId: string) {
@@ -789,7 +824,7 @@ export class CashService {
       throw new BadRequestException('La caja es obligatoria');
     }
 
-    if (input.openingAmount < 0) {
+    if (!Number.isFinite(input.openingAmount) || input.openingAmount < 0 || this.roundMoney(input.openingAmount) !== input.openingAmount) {
       throw new BadRequestException('El monto de apertura no puede ser negativo');
     }
 
@@ -827,7 +862,7 @@ export class CashService {
   }
 
   private validateCloseCashSession(input: CloseCashSessionInput) {
-    if (input.countedAmount < 0) {
+    if (!Number.isFinite(input.countedAmount) || input.countedAmount < 0 || this.roundMoney(input.countedAmount) !== input.countedAmount) {
       throw new BadRequestException('El monto contado no puede ser negativo');
     }
 

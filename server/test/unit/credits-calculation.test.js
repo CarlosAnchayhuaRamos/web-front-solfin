@@ -3,6 +3,14 @@ const { CreditsService } = require('../../src/credits/credits.service');
 const createService = () => new CreditsService({});
 
 describe('CreditsService calculation helpers', () => {
+  it('uses 26 collectible days for one daily-interest month', () => {
+    const service = createService();
+    const daily = service.getContinuousInterestSchedule(1000, 26, 'DAILY', 0.07);
+    expect(daily.reduce((sum, row) => sum + row.totalDue, 0)).toBeCloseTo(1072.51, 2);
+    const equal = service.getEqualInstallmentSchedule(1000, 26, 'DAILY', 0.078);
+    expect(equal[0].interest).toBe(3);
+    expect(daily.every((row) => new Date(`${row.dueDate}T00:00:00Z`).getUTCDay() !== 0)).toBe(true);
+  });
   it('builds equal-installment schedules with fixed total, falling interest, and rising principal', () => {
     const service = createService();
     const schedule = service.getEqualInstallmentSchedule(1000, 12, 'MONTHLY', 0.05);
