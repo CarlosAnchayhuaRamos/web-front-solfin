@@ -222,6 +222,7 @@ export class CreditsService {
     const credits = await this.prisma.credit.findMany({
       include: {
         analyst: true,
+        payments: { where: { reversedAt: null }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 1, select: { id: true, receipt: { select: { amount: true } } } },
         approvalRequest: true,
         approvedBy: true,
         documents: { select: { id: true, fileName: true, sizeBytes: true } },
@@ -231,7 +232,7 @@ export class CreditsService {
       where: {
         clientId,
         organizationId: organization.id,
-        status: { in: [CreditStatus.APPROVED, CreditStatus.ACTIVE, CreditStatus.OVERDUE, CreditStatus.PAID] },
+        status: { in: [CreditStatus.APPROVED, CreditStatus.ACTIVE, CreditStatus.OVERDUE, CreditStatus.PAID, CreditStatus.CANCELED] },
       },
     });
 
@@ -246,6 +247,8 @@ export class CreditsService {
 
       return {
         advisorId: credit.analyst.id,
+        latestPaymentId: credit.payments[0]?.id ?? null,
+        latestPaymentAmount: credit.payments[0]?.receipt ? Number(credit.payments[0].receipt.amount) : null,
         advisorName: credit.analyst.fullName,
         approvedAt: (credit.approvalRequest?.reviewedAt ?? credit.createdAt).toISOString(),
         approvedByName: credit.approvedBy?.fullName ?? null,
@@ -524,6 +527,9 @@ export class CreditsService {
       if (credit.documentDate?.getTime() !== limaDate().getTime() || !Object.values(documents).every(Boolean)) {
         throw new BadRequestException('Genere contrato, cronograma y solicitud para la fecha de desembolso de hoy');
       }
+      if (credit.firstDueDate?.getTime() !== creditDueDate(credit.paymentFrequency, 1).getTime()) {
+        throw new BadRequestException('Regenere los documentos con el cronograma actualizado antes de desembolsar');
+      }
 
       const cashSession = await tx.cashSession.findFirst({
         include: { cashBox: true },
@@ -620,7 +626,8 @@ export class CreditsService {
       if (!credit || credit.status !== CreditStatus.APPROVED) throw new BadRequestException('Credito no disponible para generar documentos');
       readPenaltyTerms(credit.penaltyTerms);
       const today = limaDate();
-      if (credit.documentDate?.getTime() === today.getTime()) return credit.clientId;
+      const expectedFirstDueDate = creditDueDate(credit.paymentFrequency, 1, today);
+      if (credit.documentDate?.getTime() === today.getTime() && credit.firstDueDate?.getTime() === expectedFirstDueDate.getTime()) return credit.clientId;
       for (const schedule of credit.schedules) {
         await tx.paymentSchedule.update({ where: { id: schedule.id }, data: {
           dueDate: creditDueDate(credit.paymentFrequency, schedule.installmentNo, today),

@@ -8,6 +8,7 @@ import { escapePrintHtml, getPrintBrandMarkup, getPrintBrandStyles, printDocumen
 import { PageHeader } from '../../common/layout/PageHeader';
 import { clientStatusOptions, initialClientForm, initialCreditDocumentChecklist } from './data';
 import { useClientCredits, useClients } from './hooks';
+import { CreditReversal, ReversalReceipt } from './components/credit-reversal';
 import {
   getClientRiskColor,
   getClientRiskLabel,
@@ -21,18 +22,6 @@ import { printApprovedPaymentSchedule, printCreditContract, printDisbursementReq
 import type { CreditContractData } from '../solicitudes/types';
 import type { Client, ClientCredit, ClientFilters, ClientFormState, CreditDocumentChecklist, CreditDocumentType, PaymentVoucher } from './types';
 
-const emptyPaymentVoucher: PaymentVoucher = {
-  amount: 0,
-  cashierName: '',
-  clientDni: '',
-  clientName: '',
-  creditCode: '',
-  paidAt: '',
-  remainingBalance: 0,
-  scheduleNumbers: [],
-  voucherCode: '',
-};
-
 export const ClientesView: React.FC = () => {
   const { downloadDocument, downloadError, downloadingId } = useDocumentDownload();
   const { user } = useAuth();
@@ -41,6 +30,7 @@ export const ClientesView: React.FC = () => {
   const { clients, createClient, error, isCreating, isLoading, isUpdating, isRefreshing, refetch, updateClient,
     page, setPage, total, filters, setFilters } = useClients();
   const {
+    reverseCredit, isReversing, reversalVoucher,
     advisors,
     assignAdvisor,
     credits,
@@ -58,11 +48,12 @@ export const ClientesView: React.FC = () => {
     confirmDocument,
     voucher: paidVoucherPreview,
   } = useClientCredits(canAssignCreditAdvisor, canUseCashSessions);
-  const voucher = paidVoucherPreview ?? emptyPaymentVoucher;
+  const voucher = paidVoucherPreview;
   const [form, setForm] = useState<ClientFormState>(initialClientForm);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [selectedCreditId, setSelectedCreditId] = useState<string | null>(null);
+  const [reversalCreditId, setReversalCreditId] = useState<string | null>(null);
   const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [documentError, setDocumentError] = useState<string | null>(null);
@@ -81,6 +72,7 @@ export const ClientesView: React.FC = () => {
   }, [credits]);
 
   const selectedCredit = credits?.find((credit) => credit.id === selectedCreditId) ?? null;
+  const reversalCredit = credits?.find((credit) => credit.id === reversalCreditId) ?? null;
   const parsedPaymentAmount = Number(paymentAmount);
   const isPaymentAmountValid = Number.isFinite(parsedPaymentAmount) && parsedPaymentAmount > 0;
   const canPayInstallments = canUseCashSessions;
@@ -124,6 +116,7 @@ export const ClientesView: React.FC = () => {
   };
 
   const handleSelectClient = (client: Client) => {
+    setReversalCreditId(null);
     setSelectedClient(client);
     setSelectedCreditId(null);
     setSelectedScheduleId(null);
@@ -138,12 +131,16 @@ export const ClientesView: React.FC = () => {
     if (!isPaymentAmountValid) return;
     if (!isSelectedCreditDisbursed) return;
 
+    const printWindow = window.open('', '_blank', 'width=960,height=680');
     const paidVoucher = await payInstallments(selectedCredit.id, parsedPaymentAmount, user.id);
 
-    if (!paidVoucher) return;
+    if (!paidVoucher) {
+      printWindow?.close();
+      return;
+    }
     setSelectedScheduleId(null);
     setPaymentAmount('');
-    printVoucher(paidVoucher);
+    printVoucher(paidVoucher, printWindow);
   };
 
   const handleDisburseCredit = async (creditId: string) => {
@@ -158,17 +155,17 @@ export const ClientesView: React.FC = () => {
   const handlePrintApprovedDocument = async (documentType: CreditDocumentType, printDocumentHandler: (printWindow: Window, contract: CreditContractData) => void) => {
     if (!selectedClient) return;
     if (!selectedCredit) return;
-    if (selectedCredit.status !== 'APPROVED') return;
+    if (selectedCredit.status === 'CANCELED') return;
 
     const printWindow = window.open('', '_blank', 'width=960,height=760');
 
     setDocumentError(null);
     if (!printWindow) { setDocumentError('Permita ventanas emergentes para generar documentos'); return; }
     try {
-      const prepared = await prepareDocuments(selectedCredit.id);
+      const prepared = selectedCredit.status === 'APPROVED' ? await prepareDocuments(selectedCredit.id) : selectedCredit;
       if (!prepared?.documentDate) { printWindow.close(); return; }
       printDocumentHandler(printWindow, toCreditContractData(selectedClient, prepared));
-      await confirmDocument(prepared.id, documentType, prepared.documentDate);
+      if (selectedCredit.status === 'APPROVED') await confirmDocument(prepared.id, documentType, prepared.documentDate);
     } catch {
       printWindow.close();
       setDocumentError('No se pudo generar el documento');
@@ -476,6 +473,8 @@ export const ClientesView: React.FC = () => {
             </div>
             <div className="card__body">
               {creditsError ? <p className="message--error">{creditsError}</p> : null}
+              {reversalVoucher ? <ReversalReceipt voucher={reversalVoucher} /> : null}
+              {reversalCredit && canAssignCreditAdvisor ? <CreditReversal key={reversalCredit.id} credit={reversalCredit} sessions={openCashSessions} busy={isReversing} submit={reverseCredit} close={() => setReversalCreditId(null)} /> : null}
               {documentError ? <p className="message--error">{documentError}</p> : null}
               {downloadError ? <p className="message--error">{downloadError}</p> : null}
               {selectedCredit?.files.map((file) => (
@@ -555,6 +554,7 @@ export const ClientesView: React.FC = () => {
                             ) : (
                               '-'
                             )}
+                            {canAssignCreditAdvisor && credit.status !== 'CANCELED' ? <Button className="button--compact" variant="destructive" disabled={isReversing || isPaying || isDisbursing} onClick={() => setReversalCreditId(credit.id)}>Revertir</Button> : null}
                           </td>
                         </tr>
                         );
@@ -573,7 +573,7 @@ export const ClientesView: React.FC = () => {
               </div>
             </div>
             <div className="card__body">
-              {selectedCredit?.status === 'APPROVED' && canPrintClientCreditDocuments ? (
+              {selectedCredit && selectedCredit.status !== 'CANCELED' && canPrintClientCreditDocuments ? (
                 <>
                   <div className="actions">
                     <Button
@@ -602,7 +602,7 @@ export const ClientesView: React.FC = () => {
                   {areSelectedCreditDocumentsReady ? <p className="message--success">Documentos generados. Credito listo para desembolso.</p> : null}
                 </>
               ) : null}
-              {voucher && false ? (
+              {voucher ? (
                 <div className="voucher">
                   <div>
                     <strong>{voucher.voucherCode}</strong>
@@ -729,8 +729,8 @@ const limitDecimals = (value: string, decimals: number) => {
   return `${integerPart}.${decimalPart.slice(0, decimals)}`;
 };
 
-const printVoucher = (voucher: PaymentVoucher) => {
-  const printWindow = window.open('', '_blank', 'width=960,height=680');
+const printVoucher = (voucher: PaymentVoucher, targetWindow?: Window | null) => {
+  const printWindow = targetWindow ?? window.open('', '_blank', 'width=960,height=680');
 
   if (!printWindow) return;
 
@@ -738,44 +738,48 @@ const printVoucher = (voucher: PaymentVoucher) => {
   const clientDni = escapePrintHtml(voucher.clientDni);
   const clientName = escapePrintHtml(voucher.clientName);
   const creditCode = escapePrintHtml(voucher.creditCode);
-  const voucherCode = escapePrintHtml(voucher.voucherCode);
-  const paidAt = new Date(voucher.paidAt).toLocaleString('es-PE');
   const voucherCopy = (includeSignature: boolean) => `
     <section class="voucher-copy">
       ${getPrintBrandMarkup(window.location.origin)}
-      <h1>Voucher de pago</h1>
-      <p><span>Fecha</span><strong>${paidAt}</strong></p>
+      <div class="voucher-heading"><h1>Voucher de pago</h1><span>${includeSignature ? 'EMPRESA' : 'CLIENTE'}</span></div>
       <p><span>Cliente</span><strong>${clientName}</strong></p>
+      <p><span>DNI / Credito</span><strong>${clientDni} / ${creditCode}</strong></p>
       <p><span>Cuotas</span><strong>${voucher.scheduleNumbers.join(', ')}</strong></p>
-      <p><span>Codigo</span><strong>${voucherCode}</strong></p>
-      <p><span>Credito</span><strong>${creditCode}</strong></p>
       <p class="amount"><span>Total</span><strong>${formatMoney(voucher.amount)}</strong></p>
       <p><span>Saldo pendiente</span><strong>${formatMoney(voucher.remainingBalance)}</strong></p>
-      ${includeSignature ? '<div class="signature"><span>Firma</span></div>' : ''}
-      <p><span>DNI</span><strong>${clientDni}</strong></p>
       <footer><span>Usuario</span><strong>${cashierName}</strong></footer>
+      ${includeSignature ? '<div class="signature"><span>Firma del cliente</span></div>' : ''}
     </section>
   `;
 
   printWindow.document.write(`
     <html>
       <head>
-        <title>${voucherCode}</title>
+        <meta charset="utf-8" />
+        <title>Voucher de pago</title>
         <style>
-          body { font-family: Arial, sans-serif; margin: 0; padding: 20px; color: #111; }
-          .voucher-sheet { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-          .voucher-copy { display: flex; min-height: 560px; flex-direction: column; padding: 0 22px; }
-          .voucher-copy + .voucher-copy { border-left: 1px dashed #777; }
-          h1 { font-size: 19px; margin: 16px 0 14px; text-align: center; }
-          p { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 8px; margin: 5px 0; font-size: 13px; }
+          @page { size: auto; margin: 0; }
+          * { box-sizing: border-box; }
+          html, body { margin: 0; padding: 0; }
+          body { color: #111; font-family: Arial, sans-serif; font-size: 9pt; line-height: 1.15; }
+          .voucher-sheet { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; align-content: start; width: 100%; max-width: 210mm; margin: 0; padding: 0 4mm; }
+          .voucher-copy { min-width: 0; padding-right: 5mm; break-inside: avoid; }
+          .voucher-copy + .voucher-copy { border-left: 1px dashed #777; padding: 0 0 0 5mm; }
+          .voucher-heading { display: flex; align-items: center; justify-content: space-between; gap: 3mm; margin: 2mm 0; }
+          .voucher-heading span { font-size: 7pt; }
+          h1 { font-size: 11pt; margin: 0; }
+          p { display: grid; grid-template-columns: 23mm minmax(0, 1fr); gap: 2mm; margin: 1mm 0; }
           p span, footer span { color: #4b5563; }
-          p strong { overflow-wrap: anywhere; }
+          p strong, footer strong { overflow-wrap: anywhere; }
           ${getPrintBrandStyles()}
-          .amount { border-top: 1px solid #aaa; margin-top: 12px; padding-top: 10px; font-size: 17px; }
-          .signature { height: 82px; margin-top: 18px; border-bottom: 1px solid #111; display: flex; align-items: end; justify-content: center; }
-          .signature span { position: relative; top: 20px; font-size: 11px; }
-          footer { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 8px; margin-top: auto; border-top: 1px solid #aaa; padding-top: 8px; font-size: 11px; }
-          @media print { body { padding: 0; } .voucher-copy { min-height: 95vh; } }
+          .print-brand { gap: 2mm; padding-bottom: 2mm; border-bottom-width: 1px; }
+          .print-brand__logo { width: 8mm; height: 8mm; }
+          .print-brand__name { font-size: 11pt; letter-spacing: 0; }
+          .print-brand__tagline { font-size: 7pt; letter-spacing: 0; }
+          .amount { border-top: 1px solid #aaa; margin-top: 2mm; padding-top: 2mm; font-size: 11pt; }
+          .signature { width: 55mm; max-width: 100%; margin: 7mm auto 0; border-top: 1px solid #111; padding-top: 1mm; text-align: center; font-size: 8pt; }
+          footer { display: grid; grid-template-columns: 23mm minmax(0, 1fr); gap: 2mm; margin-top: 1.5mm; border-top: 1px solid #aaa; padding-top: 1.5mm; font-size: 8pt; }
+          @media print { .voucher-sheet { padding-top: 0; } }
         </style>
       </head>
       <body>

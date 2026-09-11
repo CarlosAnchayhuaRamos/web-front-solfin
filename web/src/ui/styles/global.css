@@ -898,6 +898,29 @@ a {
   gap: 14px;
 }
 
+.credit-reversal {
+  padding: 16px 0;
+  margin: 12px 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.credit-reversal .form-grid {
+  margin-top: 12px;
+}
+
+.credit-reversal label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.credit-reversal input,
+.credit-reversal select {
+  width: 100%;
+  min-width: 0;
+}
+
 .denomination-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(90px, 1fr));

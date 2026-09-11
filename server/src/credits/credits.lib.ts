@@ -22,7 +22,7 @@ export const creditDueDate = (frequency: PaymentFrequency, installmentNo: number
     return date;
   }
   if (frequency === 'WEEKLY') {
-    date.setUTCDate(date.getUTCDate() + (installmentNo - 1) * 7);
+    date.setUTCDate(date.getUTCDate() + installmentNo * 7);
     return date;
   }
   const day = date.getUTCDate();

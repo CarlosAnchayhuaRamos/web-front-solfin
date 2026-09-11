@@ -74,8 +74,8 @@ export const printCreditContract = (printWindow: Window, contract: CreditContrac
           p { margin: 0 0 5px; text-align: justify; }
           .meta { display: grid; gap: 2px 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 8px 0 10px; }
           .meta p { margin: 0; text-align: left; }
-          .signatures { display: grid; gap: 40px 40px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 56px; page-break-inside: avoid; text-align: center; }
-          .signature { border-top: 1px solid #111; padding-top: 5px; }
+          .signatures { display: grid; gap: 48px 24px; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 56px; break-inside: avoid; page-break-inside: avoid; text-align: center; }
+          .signature { border-top: 1px solid #111; padding-top: 5px; overflow-wrap: anywhere; }
           ${getPrintBrandStyles()}
         </style>
       </head>
@@ -86,12 +86,8 @@ export const printCreditContract = (printWindow: Window, contract: CreditContrac
           <p><strong>Crédito:</strong> ${escapePrintHtml(contract.creditCode)}</p>
           <p><strong>Asesor:</strong> ${advisorName}</p>
           <p><strong>Aprobado por:</strong> ${approvedByName}</p>
-          <p><strong>Fecha:</strong> ${dateText}</p>
-          <p><strong>Monto:</strong> ${amount}</p>
           <p><strong>Frecuencia:</strong> ${paymentFrequencyLabel}</p>
-          <p><strong>Tipo de interes:</strong> ${interestCalculationMethodLabel}</p>
-          <p><strong>Cuota:</strong> ${formatContractMoney(contract.installmentAmount)}</p>
-          <p><strong>Total:</strong> ${formatContractMoney(contract.totalAmount)}</p>
+          <p><strong>Total:</strong> ${amount}</p>
         </div>
         <p>Conste por el presente documento el contrato de préstamo de dinero que se suscribe por duplicado, celebrado de una parte por <strong>${contractCompany.name}</strong>, con RUC ${contractCompany.ruc}, con domicilio en ${contractCompany.address}, a quien en adelante se denominará LA EMPRESA, debidamente representada por su Gerente General, la Sra. ${contractCompany.legalRepresentative}, identificada con DNI Nº ${contractCompany.legalRepresentativeDni}; y, de la otra parte, el(la) cliente(a), señor(a) <strong>${clientName}</strong>, identificado(a) con DNI Nº <strong>${clientDni}</strong>, de estado civil ____________________, señalando domicilio en <strong>${clientAddress}</strong>, a quien en adelante se denominará EL CLIENTE; y el(la) cónyuge o conviviente de EL CLIENTE, señor(a) ______________________________.</p>
         <h2>PRIMERO</h2>
@@ -132,7 +128,7 @@ export const printApprovedPaymentSchedule = (printWindow: Window, contract: Cred
       (schedule) => `
         <tr>
           <td>${schedule.installmentNo}</td>
-          <td>${new Date(schedule.dueDate).toLocaleDateString('es-PE')}</td>
+          <td>${new Date(schedule.dueDate).toLocaleDateString('es-PE', { timeZone: 'UTC' })}</td>
           <td>${formatContractMoney(schedule.principal)}</td>
           <td>${formatContractMoney(schedule.interest)}</td>
           <td>${formatContractMoney(schedule.totalDue)}</td>
@@ -148,15 +144,17 @@ export const printApprovedPaymentSchedule = (printWindow: Window, contract: Cred
         <title>Cronograma ${creditCode}</title>
         <style>
           @page { margin: 16mm; size: A4; }
-          body { color: #111827; font-family: Arial, sans-serif; margin: 0; }
-          h1 { font-size: 22px; margin: 20px 0 16px; text-align: center; }
-          p { margin: 4px 0; }
+          body { color: #111827; font-family: Arial, sans-serif; font-size: 9pt; line-height: 1.2; margin: 0; }
+          h1 { font-size: 14pt; margin: 12px 0 10px; text-align: center; }
+          p { margin: 2px 0; }
           ${getPrintBrandStyles()}
-          table { border-collapse: collapse; margin-top: 18px; width: 100%; }
-          th, td { border: 1px solid #d1d5db; padding: 8px; text-align: right; }
+          table { border-collapse: collapse; margin-top: 10px; width: 100%; font-size: 8.5pt; }
+          th, td { border: 1px solid #d1d5db; padding: 3px 6px; text-align: right; }
+          thead { display: table-header-group; }
+          tr { break-inside: avoid; }
           th { background: #f3f4f6; }
           th:first-child, td:first-child, th:nth-child(2), td:nth-child(2) { text-align: left; }
-          .meta { display: grid; gap: 6px 18px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0 0 12px; }
+          .meta { display: grid; gap: 3px 18px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0 0 8px; }
           .meta p { margin: 0; }
           .table-total td { font-weight: 700; }
           .signatures { display: grid; gap: 56px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 72px; page-break-inside: avoid; text-align: center; }

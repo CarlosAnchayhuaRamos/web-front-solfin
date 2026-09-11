@@ -1,5 +1,28 @@
 const { ClientsService } = require('../../src/clients/clients.service');
 
+test('address references are saved, returned and cleared independently of contact data', async () => {
+  const record = { id: 'client-1', firstName: 'Ana', lastName: 'Ramos', birthDate: null,
+    specialInterestRate: null, _count: { credits: 0 }, credits: [] };
+  const prisma = { client: {
+    create: jest.fn(async ({ data }) => ({ ...record, ...data })),
+    update: jest.fn(async ({ data }) => ({ ...record, ...data })),
+  } };
+  const service = new ClientsService(prisma);
+  service.getOrganization = async () => ({ id: 'solfin' });
+  const input = { firstName: 'Ana', lastName: 'Ramos', dni: '12345678', phone: '999111222',
+    referenceName: 'Maria', referencePhone: '999222333',
+    personalAddressReference: ' Frente al parque ', businessAddressReference: ' Al lado del mercado ' };
+  const created = await service.create(input);
+  expect(created).toMatchObject({ referenceName: 'Maria', referencePhone: '999222333',
+    personalAddressReference: 'Frente al parque', businessAddressReference: 'Al lado del mercado' });
+  const updated = await service.update('client-1', { ...input, personalAddressReference: '', businessAddressReference: '  ' });
+  expect(updated).toMatchObject({ referenceName: 'Maria', personalAddressReference: null, businessAddressReference: null });
+  const { personalAddressReference, businessAddressReference, ...legacyInput } = input;
+  await service.update('client-1', legacyInput);
+  expect(prisma.client.update.mock.calls[1][0].data.personalAddressReference).toBeUndefined();
+  expect(prisma.client.update.mock.calls[1][0].data.businessAddressReference).toBeUndefined();
+});
+
 test('birth dates reject impossible dates instead of rolling into another month', () => {
   const service = new ClientsService({});
   expect(service.toDate('2000-02-29').toISOString().slice(0, 10)).toBe('2000-02-29');

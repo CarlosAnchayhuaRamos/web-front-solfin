@@ -391,7 +391,7 @@ const printPaymentSchedule = (credit: RegisteredCredit) => {
   const creditStatus = escapePrintHtml(credit.status);
   const rows = credit.schedules
     .map((schedule) => {
-      const dueDate = new Date(schedule.dueDate).toLocaleDateString('es-PE');
+      const dueDate = new Date(schedule.dueDate).toLocaleDateString('es-PE', { timeZone: 'UTC' });
 
       return `
         <tr>

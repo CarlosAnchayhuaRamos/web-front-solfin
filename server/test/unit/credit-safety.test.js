@@ -26,7 +26,8 @@ test('due dates use Lima, clamp end of month, preserve first installment rule', 
   const base = limaDate(new Date('2026-02-01T02:00:00Z'));
   expect(base.toISOString().slice(0, 10)).toBe('2026-01-31');
   expect(creditDueDate('DAILY', 1, base).toISOString().slice(0, 10)).toBe('2026-02-02');
-  expect(creditDueDate('WEEKLY', 1, base)).toEqual(base);
+  expect(creditDueDate('WEEKLY', 1, base).toISOString().slice(0, 10)).toBe('2026-02-07');
+  expect(creditDueDate('WEEKLY', 2, base).toISOString().slice(0, 10)).toBe('2026-02-14');
   expect(creditDueDate('MONTHLY', 1, base)).toEqual(base);
   expect(creditDueDate('MONTHLY', 2, base).toISOString().slice(0, 10)).toBe('2026-02-28');
   expect(creditDueDate('MONTHLY', 3, base).toISOString().slice(0, 10)).toBe('2026-03-31');

@@ -4,11 +4,20 @@ import { CurrentUser, Public, Roles } from '../auth/auth.decorators';
 import type { AuthTokenPayload } from '../auth/auth.types';
 import type { ConfirmCreditDocumentInput } from './credits.types';
 import { CreditsService } from './credits.service';
+import { CreditReversalsService } from './credit-reversals.service';
+import type { ReverseCreditInput } from './credits.types';
 import type { AssignCreditAdvisorInput, CreateCreditInput, CreditSimulationInput, DisburseCreditInput, PayInstallmentsInput } from './credits.types';
 
 @Controller('credits')
 export class CreditsController {
-  constructor(private readonly creditsService: CreditsService) {}
+  constructor(private readonly creditsService: CreditsService, private readonly reversals: CreditReversalsService) {}
+
+  @Post(':creditId/reverse')
+  @Roles(UserRole.ADMIN)
+  async reverse(@Param('creditId') creditId: string, @Body() input: ReverseCreditInput, @CurrentUser() user: AuthTokenPayload) {
+    const result = await this.reversals.reverse(creditId, input, user.sub);
+    return { credits: await this.creditsService.findApprovedByClient(result.clientId), voucher: result.voucher };
+  }
 
   @Get()
   @Public()

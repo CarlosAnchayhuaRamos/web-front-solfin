@@ -75,3 +75,31 @@ export interface PaymentVoucher {
   scheduleNumbers: number[];
   voucherCode: string;
 }
+
+export interface ReversalVoucher {
+  voucherCode: string;
+  originalVoucherCode: string | null;
+  creditCode: string;
+  clientName: string;
+  clientDni: string;
+  administratorName: string;
+  cashBox: string | null;
+  reversedAt: string;
+  reason: string;
+  amount: number;
+  cashDirection: 'IN' | 'OUT' | null;
+  remainingBalance: number;
+  details: Array<{
+    installmentNo: number;
+    amount: number;
+    baseAmount: number;
+    penaltyAmount: number;
+  }>;
+}
+export interface ReverseCreditInput {
+  kind: 'CANCEL_CREDIT' | 'REVERSE_PAYMENT';
+  requestId: string;
+  reason: string;
+  cashSessionId?: string;
+  latestPaymentId?: string;
+}

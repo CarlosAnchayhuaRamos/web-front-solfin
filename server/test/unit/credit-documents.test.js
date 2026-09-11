@@ -21,12 +21,23 @@ test('preparing documents resets old confirmations and aligns dates with disburs
   await service.prepareDocuments('credit');
   expect(credit.generatedDocuments).toEqual({});
   expect(credit.documentDate).toEqual(new Date('2026-09-09Z'));
-  expect(tx.paymentSchedule.update).toHaveBeenNthCalledWith(1, { where: { id: 'one' }, data: { dueDate: new Date('2026-09-09Z') } });
-  expect(tx.paymentSchedule.update).toHaveBeenNthCalledWith(2, { where: { id: 'two' }, data: { dueDate: new Date('2026-09-16Z') } });
+  expect(tx.paymentSchedule.update).toHaveBeenNthCalledWith(1, { where: { id: 'one' }, data: { dueDate: new Date('2026-09-16Z') } });
+  expect(tx.paymentSchedule.update).toHaveBeenNthCalledWith(2, { where: { id: 'two' }, data: { dueDate: new Date('2026-09-23Z') } });
   await service.confirmDocument('credit', { type: 'contract', date: '2026-09-09' });
   await service.prepareDocuments('credit');
   expect(credit.generatedDocuments.contract).toBe(true);
   expect(tx.paymentSchedule.update).toHaveBeenCalledTimes(2);
+});
+
+test('old same-day weekly documents cannot be disbursed and are refreshed', async () => {
+  const { service, credit } = setup();
+  credit.documentDate = new Date('2026-09-09Z');
+  credit.firstDueDate = new Date('2026-09-09Z');
+  credit.generatedDocuments = { contract: true, schedule: true, disbursementRequest: true };
+  await expect(service.disburse('credit', { userId: 'cashier' })).rejects.toThrow('cronograma actualizado');
+  await service.prepareDocuments('credit');
+  expect(credit.firstDueDate).toEqual(new Date('2026-09-16Z'));
+  expect(credit.generatedDocuments).toEqual({});
 });
 
 test('API rejects disbursement with missing or outdated documents', async () => {

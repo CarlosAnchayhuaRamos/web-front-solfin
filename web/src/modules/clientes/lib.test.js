@@ -1,4 +1,4 @@
-import { filterClients, normalizeDateInput, toClientPayload } from './lib';
+import { filterClients, normalizeDateInput, toClientFormState, toClientPayload } from './lib';
 
 const client = (overrides) => ({
   activeCredits: 0,
@@ -35,6 +35,15 @@ const form = (overrides) => ({
 });
 
 describe('clientes lib', () => {
+  it('keeps contact information separate from address references when editing and saving', () => {
+    const saved = client({ referenceName: 'Ana', referencePhone: '999111222',
+      personalAddressReference: 'Frente al parque', businessAddressReference: 'Al lado del mercado' });
+    const payload = toClientPayload(toClientFormState(saved));
+    expect(payload).toMatchObject({ referenceName: 'Ana', referencePhone: '999111222',
+      personalAddressReference: 'Frente al parque', businessAddressReference: 'Al lado del mercado' });
+    expect(toClientFormState(client({ personalAddressReference: null, businessAddressReference: null })))
+      .toMatchObject({ personalAddressReference: '', businessAddressReference: '' });
+  });
   it('filters clients by name and DNI', () => {
     const clients = [
       client({ dni: '11111111', fullName: 'Carlos Medina', id: '1' }),

@@ -5,6 +5,7 @@ import { getApiErrorMessage, toClientPayload } from './lib';
 import type { PendingPaymentRequest } from './types';
 import type { ClientFilters, ClientPage } from './types';
 import { initialClientFilters } from './data';
+import type { CreditReversalRequest, ReversalVoucher } from './types';
 
 export const useClients = () => {
   const [page, setPage] = useState(1);
@@ -138,6 +139,9 @@ export const useClients = () => {
 };
 
 export const useClientCredits = (canAssignAdvisor: boolean, canUseCashSessions: boolean) => {
+  const reversalInFlight = useRef(false);
+  const [isReversing, setIsReversing] = useState(false);
+  const [reversalVoucher, setReversalVoucher] = useState<ReversalVoucher | null>(null);
   const paymentInFlight = useRef(false);
   const [advisors, setAdvisors] = useState<CreditAdvisor[] | null>(null);
   const [credits, setCredits] = useState<ClientCredit[] | null>(null);
@@ -205,6 +209,7 @@ export const useClientCredits = (canAssignAdvisor: boolean, canUseCashSessions: 
       setAdvisors(advisorsResponse ? ((await advisorsResponse.json()) as CreditAdvisor[]) : null);
       setDisbursement(null);
       setVoucher(null);
+      setReversalVoucher(null);
       return true;
     } catch {
       setError('No se pudo conectar con el backend');
@@ -325,7 +330,30 @@ export const useClientCredits = (canAssignAdvisor: boolean, canUseCashSessions: 
     }
   }, []);
 
+  const reverseCredit = useCallback(async (creditId: string, input: CreditReversalRequest) => {
+    if (reversalInFlight.current) return false;
+    reversalInFlight.current = true;
+    setIsReversing(true);
+    setError(null);
+    try {
+      const response = await apiFetch(`${apiBaseUrl}/credits/${creditId}/reverse`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+      });
+      if (!response.ok) { setError(await getApiErrorMessage(response)); return false; }
+      const data = await response.json() as { credits: ClientCredit[]; voucher: ReversalVoucher };
+      setCredits(data.credits);
+      setReversalVoucher(data.voucher);
+      setVoucher(null);
+      setDisbursement(null);
+      const sessions = await apiFetch(`${apiBaseUrl}/cash/sessions`, { cache: 'no-store' });
+      if (sessions.ok) setOpenCashSessions((await sessions.json() as OpenCashSession[]).filter((s) => s.status === 'OPEN'));
+      return true;
+    } catch { setError('No se pudo confirmar la reversion. Reintente la misma operacion.'); return false; }
+    finally { reversalInFlight.current = false; setIsReversing(false); }
+  }, []);
+
   return {
+    reverseCredit, isReversing, reversalVoucher,
     advisors,
     assignAdvisor,
     credits,

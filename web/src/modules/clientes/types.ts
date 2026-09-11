@@ -86,6 +86,8 @@ export interface ClientCreditSchedule {
 }
 
 export interface ClientCredit {
+  latestPaymentId: string | null;
+  latestPaymentAmount: number | null;
   files: Array<{ id: string; fileName: string; sizeBytes: number }>;
   documentDate: string | null;
   generatedDocuments: CreditDocumentChecklist;
@@ -108,6 +110,14 @@ export interface ClientCredit {
   status: string;
   totalAmount: number;
   type: string;
+}
+
+export interface CreditReversalRequest {
+  kind: 'CANCEL_CREDIT' | 'REVERSE_PAYMENT';
+  requestId: string;
+  reason: string;
+  cashSessionId?: string;
+  latestPaymentId?: string;
 }
 
 export interface CreditAdvisor {
@@ -147,6 +157,27 @@ export interface PaymentVoucher {
 export interface PendingPaymentRequest {
   amount: number;
   requestId: string;
+}
+
+export interface ReversalVoucher {
+  voucherCode: string;
+  originalVoucherCode: string | null;
+  creditCode: string;
+  clientName: string;
+  clientDni: string;
+  administratorName: string;
+  cashBox: string | null;
+  reversedAt: string;
+  reason: string;
+  amount: number;
+  cashDirection: 'IN' | 'OUT' | null;
+  remainingBalance: number;
+  details: Array<{
+    installmentNo: number;
+    amount: number;
+    baseAmount: number;
+    penaltyAmount: number;
+  }>;
 }
 export interface ClientPage {
   items: Client[];

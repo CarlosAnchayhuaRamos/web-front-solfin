@@ -1,0 +1,1 @@
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS "reversedAt" TIMESTAMP(3);

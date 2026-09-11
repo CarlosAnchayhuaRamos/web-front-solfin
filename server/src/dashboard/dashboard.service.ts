@@ -71,6 +71,7 @@ export class DashboardService {
         where: {
           credit: { organizationId, analystId: isAnalyst ? user.sub : undefined },
           paidAt: { gte: todayStart, lt: tomorrowStart },
+          reversedAt: null,
         },
       }),
       this.prisma.credit.groupBy({
@@ -114,7 +115,7 @@ export class DashboardService {
       this.prisma.cashSession.findMany({ where: { ...sessionWhere, status: 'OPEN' },
         select: { id: true, openingAmount: true, openedAt: true, cashBox: { select: { name: true } }, user: { select: { fullName: true } } },
         orderBy: { openedAt: 'asc' } }),
-      this.prisma.cashMovement.groupBy({ by: ['type'], _sum: { amount: true },
+      this.prisma.cashMovement.groupBy({ by: ['type', 'direction'], _sum: { amount: true },
         where: { cashSession: sessionWhere, createdAt: { gte: todayStart, lt: tomorrowStart },
           type: { in: ['PAYMENT_COLLECTION', 'CREDIT_DISBURSEMENT'] } } }),
       isAdmin ? this.prisma.vault.findFirst({ where: { organizationId, isActive: true }, select: { balance: true, openedAt: true } }) : null,
@@ -123,8 +124,8 @@ export class DashboardService {
       where: { cashSession: { ...sessionWhere, status: 'OPEN' } } });
     return {
       vault: vault ? { balance: Number(vault.balance), isOpen: Boolean(vault.openedAt) } : null,
-      collectedToday: Number(movements.find((row) => row.type === 'PAYMENT_COLLECTION')?._sum.amount ?? 0),
-      disbursedToday: Number(movements.find((row) => row.type === 'CREDIT_DISBURSEMENT')?._sum.amount ?? 0),
+      collectedToday: movements.filter((row) => row.type === 'PAYMENT_COLLECTION').reduce((n, row) => n + (row.direction === 'OUT' ? -1 : 1) * Number(row._sum.amount ?? 0), 0),
+      disbursedToday: movements.filter((row) => row.type === 'CREDIT_DISBURSEMENT').reduce((n, row) => n + (row.direction === 'IN' ? -1 : 1) * Number(row._sum.amount ?? 0), 0),
       sessions: sessions.map((session) => ({ id: session.id, name: session.cashBox.name, cashier: session.user.fullName,
         openedAt: session.openedAt.toISOString(), balance: this.roundMoney(Number(session.openingAmount) + balances
           .filter((row) => row.cashSessionId === session.id)

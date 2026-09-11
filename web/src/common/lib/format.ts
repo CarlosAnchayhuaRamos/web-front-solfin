@@ -10,6 +10,7 @@ const percentageFormatter = new Intl.NumberFormat('es-PE', {
 });
 
 const dateFormatter = new Intl.DateTimeFormat('es-PE', {
+  timeZone: 'UTC',
   day: '2-digit',
   month: 'short',
   year: 'numeric',
