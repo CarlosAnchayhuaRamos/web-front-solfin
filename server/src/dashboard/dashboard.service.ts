@@ -41,24 +41,24 @@ export class DashboardService {
     const creditWhere = {
       analystId: isAnalyst ? user.sub : undefined,
       organizationId,
-      status: { in: [CreditStatus.ACTIVE, CreditStatus.OVERDUE] },
+      status: { in: [CreditStatus.ACTIVO, CreditStatus.VENCIDO] },
     };
 
     const [portfolio, overdueSchedules, activeCreditCount, overdueCreditCount, pendingApprovalCount, collectedToday, activeClients] = await Promise.all([
       this.prisma.paymentSchedule.aggregate({
         _sum: { paidAmount: true, penalty: true, totalDue: true },
-        where: { credit: creditWhere, status: { not: PaymentStatus.CANCELED } },
+        where: { credit: creditWhere, status: { not: PaymentStatus.CANCELADO } },
       }),
       this.prisma.paymentSchedule.aggregate({
         _sum: { paidAmount: true, penalty: true, totalDue: true },
         where: {
           credit: creditWhere,
           dueDate: { lt: dueDayStart },
-          status: { in: [PaymentStatus.PENDING, PaymentStatus.PARTIAL, PaymentStatus.OVERDUE] },
+          status: { in: [PaymentStatus.PENDIENTE, PaymentStatus.PARCIAL, PaymentStatus.VENCIDO] },
         },
       }),
       this.prisma.credit.count({ where: creditWhere }),
-      this.prisma.credit.count({ where: { ...creditWhere, status: CreditStatus.OVERDUE } }),
+      this.prisma.credit.count({ where: { ...creditWhere, status: CreditStatus.VENCIDO } }),
       this.prisma.approvalRequest.count({
         where: {
           organizationId,
@@ -87,9 +87,9 @@ export class DashboardService {
         _sum: { paidAmount: true, penalty: true, totalDue: true },
         _count: true,
         where: { credit: creditWhere, dueDate: { gte: dueDayStart, lt: dueDayEnd },
-          status: { in: [PaymentStatus.PENDING, PaymentStatus.PARTIAL, PaymentStatus.OVERDUE] } },
+          status: { in: [PaymentStatus.PENDIENTE, PaymentStatus.PARCIAL, PaymentStatus.VENCIDO] } },
       }),
-      this.prisma.credit.count({ where: { organizationId, analystId: isAnalyst ? user.sub : undefined, status: CreditStatus.APPROVED } }),
+      this.prisma.credit.count({ where: { organizationId, analystId: isAnalyst ? user.sub : undefined, status: CreditStatus.APROBADO } }),
     ]);
 
     return {

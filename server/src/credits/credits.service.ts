@@ -158,7 +158,7 @@ export class CreditsService {
                 },
               }
             : undefined,
-          status: requiresAdminApproval ? CreditStatus.PENDING_APPROVAL : CreditStatus.APPROVED,
+          status: requiresAdminApproval ? CreditStatus.PENDIENTE_APROBACION : CreditStatus.APROBADO,
           totalAmount: simulation.totalAmount,
           type: input.productType,
         },
@@ -232,7 +232,7 @@ export class CreditsService {
       where: {
         clientId,
         organizationId: organization.id,
-        status: { in: [CreditStatus.APPROVED, CreditStatus.ACTIVE, CreditStatus.OVERDUE, CreditStatus.PAID, CreditStatus.CANCELED] },
+        status: { in: [CreditStatus.APROBADO, CreditStatus.ACTIVO, CreditStatus.VENCIDO, CreditStatus.PAGADO, CreditStatus.CANCELADO] },
       },
     });
 
@@ -241,7 +241,7 @@ export class CreditsService {
       const penaltySettings = { DAILY: penaltySetting, WEEKLY: penaltySetting, MONTHLY: penaltySetting };
       const netValue = Number(credit.totalAmount) - Number(credit.principalAmount);
       const overdueAmount = credit.schedules.reduce((total, schedule) => {
-        if (!credit.disbursedAt || schedule.status === PaymentStatus.PAID || schedule.status === PaymentStatus.CANCELED) return total;
+        if (!credit.disbursedAt || schedule.status === PaymentStatus.PAGADO || schedule.status === PaymentStatus.CANCELADO) return total;
         return total + Math.max(0, this.calculatePenalty(schedule, credit.paymentFrequency, penaltySettings) - Number(schedule.penaltyPaid));
       }, 0);
 
@@ -272,6 +272,7 @@ export class CreditsService {
           installmentNo: schedule.installmentNo,
           interest: Number(schedule.interest),
           paidAmount: Number(schedule.paidAmount),
+          paidAt: schedule.paidAt?.toISOString().slice(0, 10) ?? null,
           penalty: credit.disbursedAt ? this.calculatePenalty(schedule, credit.paymentFrequency, penaltySettings) : 0,
           principal: Number(schedule.principal),
           status: credit.disbursedAt ? this.getScheduleStatus(schedule) : schedule.status,
@@ -365,7 +366,7 @@ export class CreditsService {
         return { clientId: credit.clientId, voucher: receipt.voucher };
       }
 
-      if (credit.status !== CreditStatus.ACTIVE && credit.status !== CreditStatus.OVERDUE) {
+      if (credit.status !== CreditStatus.ACTIVO && credit.status !== CreditStatus.VENCIDO) {
         throw new BadRequestException('El credito debe estar desembolsado para registrar pagos');
       }
 
@@ -373,7 +374,7 @@ export class CreditsService {
         orderBy: { installmentNo: 'asc' },
         where: {
           creditId,
-          status: { in: [PaymentStatus.PENDING, PaymentStatus.PARTIAL, PaymentStatus.OVERDUE] },
+          status: { in: [PaymentStatus.PENDIENTE, PaymentStatus.PARCIAL, PaymentStatus.VENCIDO] },
         },
       });
 
@@ -440,7 +441,7 @@ export class CreditsService {
             penalty: schedulePenalty,
             penaltyPaid: this.roundMoney(Number(schedule.penaltyPaid) + penaltyPayment),
             penaltyAccruedDays: Math.max(schedule.penaltyAccruedDays, penaltyDays(schedule.dueDate, terms.graceDays)),
-            status: isPaid ? PaymentStatus.PAID : PaymentStatus.PARTIAL,
+            status: isPaid ? PaymentStatus.PAGADO : PaymentStatus.PARCIAL,
           },
           where: { id: schedule.id },
         });
@@ -462,10 +463,10 @@ export class CreditsService {
         appliedSchedules.push(schedule.installmentNo);
         remainingAmount = this.roundMoney(remainingAmount - appliedAmount);
       }
-      const unpaid = await tx.paymentSchedule.count({ where: { creditId, status: { notIn: [PaymentStatus.PAID, PaymentStatus.CANCELED] } } });
+      const unpaid = await tx.paymentSchedule.count({ where: { creditId, status: { notIn: [PaymentStatus.PAGADO, PaymentStatus.CANCELADO] } } });
       if (!unpaid) {
-        await tx.credit.update({ where: { id: creditId }, data: { status: CreditStatus.PAID, closedAt: new Date() } });
-        await tx.creditStatusHistory.create({ data: { creditId, changedById: input.userId, fromStatus: credit.status, toStatus: CreditStatus.PAID } });
+        await tx.credit.update({ where: { id: creditId }, data: { status: CreditStatus.PAGADO, closedAt: new Date() } });
+        await tx.creditStatusHistory.create({ data: { creditId, changedById: input.userId, fromStatus: credit.status, toStatus: CreditStatus.PAGADO } });
       }
       const voucher = {
           amount: paymentAmount,
@@ -520,7 +521,7 @@ export class CreditsService {
         throw new NotFoundException('Credito no encontrado');
       }
 
-      if (credit.status !== CreditStatus.APPROVED || credit.disbursedAt) {
+      if (credit.status !== CreditStatus.APROBADO || credit.disbursedAt) {
         throw new BadRequestException('El credito no esta disponible para desembolso');
       }
       const documents = documentChecklist(credit.generatedDocuments);
@@ -581,22 +582,22 @@ export class CreditsService {
         },
       });
       await tx.credit.update({
-        data: { disbursedAt: new Date(), status: CreditStatus.ACTIVE },
+        data: { disbursedAt: new Date(), status: CreditStatus.ACTIVO },
         where: { id: credit.id },
       });
       await tx.auditLog.create({ data: {
         organizationId: organization.id, actorId: responsible.id,
         entity: 'Credit', entityId: credit.id, action: 'CASH_DISBURSEMENT',
         before: { status: credit.status },
-        after: { status: CreditStatus.ACTIVE, amount: disbursementAmount, cashSessionId: cashSession.id },
+        after: { status: CreditStatus.ACTIVO, amount: disbursementAmount, cashSessionId: cashSession.id },
       } });
       await tx.creditStatusHistory.create({
         data: {
           changedById: responsible.id,
           creditId: credit.id,
-          fromStatus: CreditStatus.APPROVED,
+          fromStatus: CreditStatus.APROBADO,
           notes: `Desembolsado desde caja ${cashSession.cashBox.name}`,
-          toStatus: CreditStatus.ACTIVE,
+          toStatus: CreditStatus.ACTIVO,
         },
       });
 
@@ -623,7 +624,7 @@ export class CreditsService {
     const clientId = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM credits WHERE id = ${creditId}::uuid FOR UPDATE`;
       const credit = await tx.credit.findFirst({ where: { id: creditId, organizationId: organization.id }, include: { schedules: true } });
-      if (!credit || credit.status !== CreditStatus.APPROVED) throw new BadRequestException('Credito no disponible para generar documentos');
+      if (!credit || credit.status !== CreditStatus.APROBADO) throw new BadRequestException('Credito no disponible para generar documentos');
       readPenaltyTerms(credit.penaltyTerms);
       const today = limaDate();
       const expectedFirstDueDate = creditDueDate(credit.paymentFrequency, 1, today);
@@ -647,7 +648,7 @@ export class CreditsService {
     return this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM credits WHERE id = ${creditId}::uuid FOR UPDATE`;
       const credit = await tx.credit.findFirst({ where: { id: creditId, organizationId: organization.id } });
-      if (!credit || credit.status !== CreditStatus.APPROVED || !credit.documentDate
+      if (!credit || credit.status !== CreditStatus.APROBADO || !credit.documentDate
         || credit.documentDate.getTime() !== limaDate().getTime()
         || credit.documentDate.toISOString().slice(0, 10) !== input.date) {
         throw new BadRequestException('Los documentos deben regenerarse para hoy');
@@ -825,9 +826,9 @@ export class CreditsService {
   }
 
   private getScheduleStatus(schedule: { dueDate: Date; status: PaymentStatus }) {
-    if (schedule.status === PaymentStatus.PAID || schedule.status === PaymentStatus.CANCELED) return schedule.status;
+    if (schedule.status === PaymentStatus.PAGADO || schedule.status === PaymentStatus.CANCELADO) return schedule.status;
     if (this.getPenaltyDays(schedule.dueDate, 0) <= 0) return schedule.status;
-    return PaymentStatus.OVERDUE;
+    return PaymentStatus.VENCIDO;
   }
 
   private getPenaltyDays(dueDate: Date, graceDays: number) {

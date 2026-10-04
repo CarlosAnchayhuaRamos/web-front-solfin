@@ -79,7 +79,7 @@ export const ClientesView: React.FC = () => {
   const canDisburseCredits = canUseCashSessions;
   const canPrintClientCreditDocuments = canUseCashSessions;
   const ownOpenCashSession = user ? openCashSessions?.find((session) => session.userId === user.id) ?? null : null;
-  const isSelectedCreditDisbursed = selectedCredit?.status === 'ACTIVE' || selectedCredit?.status === 'OVERDUE';
+  const isSelectedCreditDisbursed = selectedCredit?.status === 'ACTIVO' || selectedCredit?.status === 'VENCIDO';
   const selectedCreditDocuments = selectedCredit?.generatedDocuments ?? initialCreditDocumentChecklist;
   const areSelectedCreditDocumentsReady = isCreditDocumentChecklistComplete(selectedCreditDocuments);
   const pendingCreditDocumentLabels = getPendingCreditDocumentLabels(selectedCreditDocuments);
@@ -155,17 +155,17 @@ export const ClientesView: React.FC = () => {
   const handlePrintApprovedDocument = async (documentType: CreditDocumentType, printDocumentHandler: (printWindow: Window, contract: CreditContractData) => void) => {
     if (!selectedClient) return;
     if (!selectedCredit) return;
-    if (selectedCredit.status === 'CANCELED') return;
+    if (selectedCredit.status === 'CANCELADO') return;
 
     const printWindow = window.open('', '_blank', 'width=960,height=760');
 
     setDocumentError(null);
     if (!printWindow) { setDocumentError('Permita ventanas emergentes para generar documentos'); return; }
     try {
-      const prepared = selectedCredit.status === 'APPROVED' ? await prepareDocuments(selectedCredit.id) : selectedCredit;
+      const prepared = selectedCredit.status === 'APROBADO' ? await prepareDocuments(selectedCredit.id) : selectedCredit;
       if (!prepared?.documentDate) { printWindow.close(); return; }
       printDocumentHandler(printWindow, toCreditContractData(selectedClient, prepared));
-      if (selectedCredit.status === 'APPROVED') await confirmDocument(prepared.id, documentType, prepared.documentDate);
+      if (selectedCredit.status === 'APROBADO') await confirmDocument(prepared.id, documentType, prepared.documentDate);
     } catch {
       printWindow.close();
       setDocumentError('No se pudo generar el documento');
@@ -348,6 +348,54 @@ export const ClientesView: React.FC = () => {
                 <label htmlFor="referencePhone">Telefono de contacto</label>
                 <input id="referencePhone" onChange={(event) => handleChange('referencePhone', event.target.value)} value={form.referencePhone} />
               </div>
+              <fieldset className="form-grid" style={{ gridColumn: '1 / -1', minWidth: 0 }}>
+                <legend>Conyugue (opcional)</legend>
+                <label className="field field--checkbox" htmlFor="hasSpouse">
+                  <input
+                    checked={form.hasSpouse}
+                    id="hasSpouse"
+                    onChange={(event) => handleChange('hasSpouse', event.target.checked)}
+                    type="checkbox"
+                  />
+                  Agregar conyugue
+                </label>
+                {form.hasSpouse ? (
+                  <>
+                    <div className="field">
+                      <label htmlFor="spouseFullName">Nombre completo del conyugue</label>
+                      <input id="spouseFullName" onChange={(event) => handleChange('spouseFullName', event.target.value)} value={form.spouseFullName} />
+                    </div>
+                    <div className="field">
+                      <label htmlFor="spousePhone">Telefono del conyugue</label>
+                      <input id="spousePhone" onChange={(event) => handleChange('spousePhone', event.target.value)} value={form.spousePhone} />
+                    </div>
+                  </>
+                ) : null}
+              </fieldset>
+              <fieldset className="form-grid" style={{ gridColumn: '1 / -1', minWidth: 0 }}>
+                <legend>Aval (opcional)</legend>
+                <label className="field field--checkbox" htmlFor="hasGuarantor">
+                  <input
+                    checked={form.hasGuarantor}
+                    id="hasGuarantor"
+                    onChange={(event) => handleChange('hasGuarantor', event.target.checked)}
+                    type="checkbox"
+                  />
+                  Agregar aval
+                </label>
+                {form.hasGuarantor ? (
+                  <>
+                    <div className="field">
+                      <label htmlFor="guarantorFullName">Nombre completo del aval</label>
+                      <input id="guarantorFullName" onChange={(event) => handleChange('guarantorFullName', event.target.value)} value={form.guarantorFullName} />
+                    </div>
+                    <div className="field">
+                      <label htmlFor="guarantorPhone">Telefono del aval</label>
+                      <input id="guarantorPhone" onChange={(event) => handleChange('guarantorPhone', event.target.value)} value={form.guarantorPhone} />
+                    </div>
+                  </>
+                ) : null}
+              </fieldset>
               <fieldset className="form-grid" style={{ gridColumn: '1 / -1', minWidth: 0 }}>
               <legend>Datos de negocio (opcional)</legend>
               <div className="field">
@@ -543,7 +591,7 @@ export const ClientesView: React.FC = () => {
                             )}
                           </td>
                           <td onClick={(event) => event.stopPropagation()}>
-                            {credit.status === 'APPROVED' && canDisburseCredits ? (
+                            {credit.status === 'APROBADO' && canDisburseCredits ? (
                               <Button
                                 className="button--compact"
                                 disabled={!canDisburseCredits || !ownOpenCashSession || isDisbursing || !areCreditDocumentsReady}
@@ -551,10 +599,8 @@ export const ClientesView: React.FC = () => {
                               >
                                 Desembolsar
                               </Button>
-                            ) : (
-                              '-'
-                            )}
-                            {canAssignCreditAdvisor && credit.status !== 'CANCELED' ? <Button className="button--compact" variant="destructive" disabled={isReversing || isPaying || isDisbursing} onClick={() => setReversalCreditId(credit.id)}>Revertir</Button> : null}
+                            ) : null}
+                            {canAssignCreditAdvisor && credit.status !== 'CANCELADO' ? <Button className="button--compact" variant="destructive" disabled={isReversing || isPaying || isDisbursing} onClick={() => setReversalCreditId(credit.id)}>Revertir</Button> : null}
                           </td>
                         </tr>
                         );
@@ -573,7 +619,7 @@ export const ClientesView: React.FC = () => {
               </div>
             </div>
             <div className="card__body">
-              {selectedCredit && selectedCredit.status !== 'CANCELED' && canPrintClientCreditDocuments ? (
+              {selectedCredit && selectedCredit.status === 'APROBADO' && canPrintClientCreditDocuments ? (
                 <>
                   <div className="actions">
                     <Button
@@ -650,7 +696,7 @@ export const ClientesView: React.FC = () => {
                         <th className="table__number">Interes</th>
                         <th className="table__number">Mora</th>
                         <th className="table__number">Total</th>
-                        <th className="table__number">Pagado</th>
+                        <th>Fecha de pago</th>
                         <th className="table__number">Saldo</th>
                         <th>Estado</th>
                       </tr>
@@ -676,7 +722,7 @@ export const ClientesView: React.FC = () => {
                             <td className="money">{formatMoney(schedule.interest)}</td>
                             <td className="money">{formatMoney(schedule.penalty)}</td>
                             <td className="money">{formatMoney(schedule.totalDue)}</td>
-                            <td className="money">{formatMoney(schedule.paidAmount)}</td>
+                            <td>{schedule.paidAt ? formatDueDate(schedule.paidAt) : '-'}</td>
                             <td className="money">{formatMoney(pendingAmount)}</td>
                             <td>{schedule.status}</td>
                           </tr>

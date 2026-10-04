@@ -23,7 +23,7 @@ export class ReportsService {
       where: {
         analystId: isAnalyst ? user.sub : undefined,
         organizationId: organization.id,
-        status: { in: [CreditStatus.APPROVED, CreditStatus.ACTIVE, CreditStatus.OVERDUE] },
+        status: { in: [CreditStatus.APROBADO, CreditStatus.ACTIVO, CreditStatus.VENCIDO] },
       },
       include: {
         client: true,
@@ -91,21 +91,21 @@ export class ReportsService {
 
   private getPendingAmount(schedules: Array<{ paidAmount: unknown; penalty: unknown; status: PaymentStatus; totalDue: unknown }>) {
     return schedules.reduce((total, schedule) => {
-      if (schedule.status === PaymentStatus.CANCELED) return total;
+      if (schedule.status === PaymentStatus.CANCELADO) return total;
       return this.roundMoney(total + Math.max(0, Number(schedule.totalDue) + Number(schedule.penalty) - Number(schedule.paidAmount)));
     }, 0);
   }
 
   private getOverdueAmount(schedules: Array<{ dueDate: Date; paidAmount: unknown; penalty: unknown; status: PaymentStatus; totalDue: unknown }>, todayStart: Date) {
     return schedules.reduce((total, schedule) => {
-      if (schedule.status === PaymentStatus.CANCELED || schedule.status === PaymentStatus.PAID) return total;
+      if (schedule.status === PaymentStatus.CANCELADO || schedule.status === PaymentStatus.PAGADO) return total;
       if (schedule.dueDate >= todayStart) return total;
       return this.roundMoney(total + Math.max(0, Number(schedule.totalDue) + Number(schedule.penalty) - Number(schedule.paidAmount)));
     }, 0);
   }
 
   private getNextDueDate(schedules: Array<{ dueDate: Date; status: PaymentStatus }>) {
-    const schedule = schedules.find((item) => item.status === PaymentStatus.PENDING || item.status === PaymentStatus.PARTIAL || item.status === PaymentStatus.OVERDUE);
+    const schedule = schedules.find((item) => item.status === PaymentStatus.PENDIENTE || item.status === PaymentStatus.PARCIAL || item.status === PaymentStatus.VENCIDO);
 
     if (!schedule) return null;
     return schedule.dueDate.toISOString();

@@ -5,8 +5,8 @@ const input = { kind: 'CANCEL_CREDIT', requestId: '14fd1686-8b5d-421f-a023-9755d
 const terms = { method: 'SIMPLE', rate: 0, capRate: 0, fixedDailyAmount: 0, graceDays: 0 };
 function setup() {
   const credit = { id: 'credit', code: 'CRE-00001', organizationId: 'org', clientId: 'client', client: { firstName: 'A', lastName: 'B', dni: '12345678' },
-    status: 'ACTIVE', disbursedAt: new Date(), principalAmount: 1000, penaltyTerms: terms,
-    schedules: [{ id: 'schedule', installmentNo: 1, paidAmount: 0, penaltyPaid: 0, penalty: 0, penaltyAccruedDays: 0, totalDue: 137.5, status: 'PENDING', dueDate: new Date('2099-01-01Z') }] };
+    status: 'ACTIVO', disbursedAt: new Date(), principalAmount: 1000, penaltyTerms: terms,
+    schedules: [{ id: 'schedule', installmentNo: 1, paidAmount: 0, penaltyPaid: 0, penalty: 0, penaltyAccruedDays: 0, totalDue: 137.5, status: 'PENDIENTE', dueDate: new Date('2099-01-01Z') }] };
   const tx = {
     $queryRaw: jest.fn(), credit: { findFirst: jest.fn().mockResolvedValue(credit), update: jest.fn() },
     payment: { findMany: jest.fn().mockResolvedValue([]), updateMany: jest.fn() },
@@ -24,13 +24,13 @@ test('cancellation returns principal to cash and preserves a voucher and cancele
   const result = await service.reverse('credit', input, 'admin');
   expect(result.voucher).toMatchObject({ amount: 1000, cashDirection: 'IN', remainingBalance: 0 });
   expect(tx.cashMovement.create).toHaveBeenCalledWith({ data: expect.objectContaining({ amount: 1000, direction: 'IN' }) });
-  expect(tx.credit.update).toHaveBeenCalledWith({ where: { id: 'credit' }, data: expect.objectContaining({ status: 'CANCELED' }) });
-  expect(tx.paymentSchedule.updateMany).toHaveBeenCalledWith({ where: { creditId: 'credit' }, data: { status: 'CANCELED' } });
+  expect(tx.credit.update).toHaveBeenCalledWith({ where: { id: 'credit' }, data: expect.objectContaining({ status: 'CANCELADO' }) });
+  expect(tx.paymentSchedule.updateMany).toHaveBeenCalledWith({ where: { creditId: 'credit' }, data: { status: 'CANCELADO' } });
   expect(tx.auditLog.create).toHaveBeenCalled();
 });
 test('retries return stored result even after cancellation without another movement', async () => {
   const { service, tx, credit } = setup();
-  credit.status = 'CANCELED';
+  credit.status = 'CANCELADO';
   tx.auditLog.findUnique.mockResolvedValue({ entityId: 'credit', actorId: 'admin', action: input.kind, after: { input, voucher: { amount: 1000 } } });
   expect((await service.reverse('credit', input, 'admin')).voucher.amount).toBe(1000);
   expect(tx.cashMovement.create).not.toHaveBeenCalled();
@@ -45,15 +45,15 @@ test('cancellation refuses collected payments and a closed cash session', async 
 });
 test('an approved credit is canceled without inventing cash income', async () => {
   const { service, credit, tx } = setup();
-  credit.status = 'APPROVED'; credit.disbursedAt = null;
+  credit.status = 'APROBADO'; credit.disbursedAt = null;
   expect((await service.reverse('credit', input, 'admin')).voucher.amount).toBe(0);
   expect(tx.cashMovement.create).not.toHaveBeenCalled();
 });
 test('the whole latest receipt is reversed across all covered installments', async () => {
   const { service, credit, tx } = setup();
-  const earlier = { ...credit.schedules[0], id: 'earlier', installmentNo: 1, paidAmount: 137.5, status: 'PAID' };
-  credit.schedules[0] = { ...credit.schedules[0], installmentNo: 2, paidAmount: 137.5, status: 'PAID' };
-  credit.schedules.push(earlier); credit.status = 'PAID';
+  const earlier = { ...credit.schedules[0], id: 'earlier', installmentNo: 1, paidAmount: 137.5, status: 'PAGADO' };
+  credit.schedules[0] = { ...credit.schedules[0], installmentNo: 2, paidAmount: 137.5, status: 'PAGADO' };
+  credit.schedules.push(earlier); credit.status = 'PAGADO';
   const allocations = [
     { id: 'latest', creditId: 'credit', paymentScheduleId: 'schedule', amount: 137.5, baseAmount: 137.5, penaltyAmount: 0, receiptId: 'receipt' },
     { id: 'earlier-payment', creditId: 'credit', paymentScheduleId: 'earlier', amount: 137.5, baseAmount: 137.5, penaltyAmount: 0, receiptId: 'receipt' },
@@ -68,7 +68,7 @@ test('the whole latest receipt is reversed across all covered installments', asy
   ] });
   expect(tx.payment.updateMany).toHaveBeenCalledWith({ where: { id: { in: ['latest', 'earlier-payment'] }, reversedAt: null }, data: { reversedAt: expect.any(Date) } });
   expect(tx.cashMovement.create).toHaveBeenCalledWith({ data: expect.objectContaining({ amount: 275, direction: 'OUT' }) });
-  expect(tx.credit.update).toHaveBeenCalledWith({ where: { id: 'credit' }, data: expect.objectContaining({ status: 'ACTIVE', closedAt: null }) });
+  expect(tx.credit.update).toHaveBeenCalledWith({ where: { id: 'credit' }, data: expect.objectContaining({ status: 'ACTIVO', closedAt: null }) });
   await expect(service.reverse('credit', { ...request, latestPaymentId: 'stale' }, 'admin')).rejects.toThrow('cambio');
   tx.cashMovement.groupBy.mockResolvedValue([{ direction: 'OUT', _sum: { amount: 1000 } }]);
   await expect(service.reverse('credit', request, 'admin')).rejects.toThrow('insuficiente');
@@ -76,14 +76,14 @@ test('the whole latest receipt is reversed across all covered installments', asy
 
 test('reversing a receipt preserves older abonos and only subtracts its penalty allocation', async () => {
   const { service, credit, tx } = setup();
-  Object.assign(credit.schedules[0], { paidAmount: 100, penaltyPaid: 10, penalty: 10, status: 'PARTIAL' });
+  Object.assign(credit.schedules[0], { paidAmount: 100, penaltyPaid: 10, penalty: 10, status: 'PARCIAL' });
   const latest = { id: 'latest', creditId: 'credit', paymentScheduleId: 'schedule', receiptId: 'receipt', amount: 40, baseAmount: 35, penaltyAmount: 5 };
   tx.payment.findMany.mockResolvedValue([latest, { ...latest, id: 'older', receiptId: 'older-receipt', amount: 60 }]);
   tx.paymentReceipt.findUnique.mockResolvedValue({ id: 'receipt', creditId: 'credit', amount: 40, payments: [latest] });
   const request = { ...input, kind: 'REVERSE_PAYMENT', latestPaymentId: 'latest' };
   const result = await service.reverse('credit', request, 'admin');
   expect(result.voucher).toMatchObject({ amount: 40, remainingBalance: 87.5 });
-  expect(tx.paymentSchedule.update).toHaveBeenCalledWith({ where: { id: 'schedule' }, data: expect.objectContaining({ paidAmount: 60, penaltyPaid: 5, status: 'PARTIAL' }) });
+  expect(tx.paymentSchedule.update).toHaveBeenCalledWith({ where: { id: 'schedule' }, data: expect.objectContaining({ paidAmount: 60, penaltyPaid: 5, status: 'PARCIAL' }) });
   const audit = tx.auditLog.create.mock.calls[0][0].data;
   tx.auditLog.findUnique.mockResolvedValue(audit);
   tx.cashMovement.create.mockClear();

@@ -1,39 +1,39 @@
 import type { CreditStatusInfo } from '../../modules/solicitudes/types';
 
 export const statusLabels = {
-  DRAFT: 'Borrador',
-  PENDING_APPROVAL: 'Pendiente',
-  APPROVED: 'Aprobado',
-  REJECTED: 'Rechazado',
-  ACTIVE: 'Activo',
-  PAID: 'Pagado',
-  OVERDUE: 'Vencido',
-  DEFAULTED: 'Castigado',
-  CANCELED: 'Cancelado',
+  BORRADOR: 'BORRADOR',
+  PENDIENTE_APROBACION: 'PENDIENTE_APROBACION',
+  APROBADO: 'APROBADO',
+  RECHAZADO: 'RECHAZADO',
+  ACTIVO: 'ACTIVO',
+  PAGADO: 'PAGADO',
+  VENCIDO: 'VENCIDO',
+  CASTIGADO: 'CASTIGADO',
+  CANCELADO: 'CANCELADO',
 } as const;
 
 export const statusColors = {
-  DRAFT: 'gray',
-  PENDING_APPROVAL: 'yellow',
-  APPROVED: 'blue',
-  REJECTED: 'red',
-  ACTIVE: 'blue',
-  PAID: 'black',
-  OVERDUE: 'red',
-  DEFAULTED: 'red',
-  CANCELED: 'gray',
+  BORRADOR: 'gray',
+  PENDIENTE_APROBACION: 'yellow',
+  APROBADO: 'blue',
+  RECHAZADO: 'red',
+  ACTIVO: 'blue',
+  PAGADO: 'black',
+  VENCIDO: 'red',
+  CASTIGADO: 'red',
+  CANCELADO: 'gray',
 } as const;
 
 export const stateTransitions = {
-  DRAFT: ['PENDING_APPROVAL', 'CANCELED'],
-  PENDING_APPROVAL: ['APPROVED', 'REJECTED', 'CANCELED'],
-  APPROVED: ['ACTIVE', 'CANCELED'],
-  REJECTED: ['DRAFT'],
-  ACTIVE: ['PAID', 'OVERDUE', 'DEFAULTED'],
-  PAID: [],
-  OVERDUE: ['ACTIVE', 'PAID', 'DEFAULTED'],
-  DEFAULTED: [],
-  CANCELED: [],
+  BORRADOR: ['PENDIENTE_APROBACION', 'CANCELADO'],
+  PENDIENTE_APROBACION: ['APROBADO', 'RECHAZADO', 'CANCELADO'],
+  APROBADO: ['ACTIVO', 'CANCELADO'],
+  RECHAZADO: ['BORRADOR'],
+  ACTIVO: ['PAGADO', 'VENCIDO', 'CASTIGADO'],
+  PAGADO: [],
+  VENCIDO: ['ACTIVO', 'PAGADO', 'CASTIGADO'],
+  CASTIGADO: [],
+  CANCELADO: [],
 } as const;
 
 export const creditStatusMap: Record<string, CreditStatusInfo> = Object.keys(statusLabels).reduce(

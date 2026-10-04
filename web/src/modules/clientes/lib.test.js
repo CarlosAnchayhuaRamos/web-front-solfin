@@ -4,16 +4,33 @@ const client = (overrides) => ({
   activeCredits: 0,
   birthDate: null,
   businessAddress: null,
+  businessAddressReference: null,
+  businessActivity: null,
+  businessName: null,
+  businessPhone: null,
+  businessRuc: null,
+  department: null,
+  district: null,
   dni: '12345678',
   email: null,
   firstName: 'Carlos',
   fullName: 'Carlos Medina',
+  guarantorFullName: null,
+  guarantorPhone: null,
+  hasGuarantor: false,
+  hasSpouse: false,
   id: 'client-id',
   isSpecial: false,
   lastName: 'Medina',
   personalAddress: null,
+  personalAddressReference: null,
   phone: '999999999',
+  province: null,
+  referenceName: null,
+  referencePhone: null,
   specialInterestRate: null,
+  spouseFullName: null,
+  spousePhone: null,
   status: 'ACTIVE',
   totalDebt: 0,
   ...overrides,
@@ -22,14 +39,31 @@ const client = (overrides) => ({
 const form = (overrides) => ({
   birthDate: '',
   businessAddress: '',
+  businessAddressReference: '',
+  businessActivity: '',
+  businessName: '',
+  businessPhone: '',
+  businessRuc: '',
+  department: '',
+  district: '',
   dni: '12345678',
   email: '',
   firstName: 'Carlos',
+  guarantorFullName: '',
+  guarantorPhone: '',
+  hasGuarantor: false,
+  hasSpouse: false,
   isSpecial: false,
   lastName: 'Medina',
   personalAddress: '',
+  personalAddressReference: '',
   phone: '999999999',
+  province: '',
+  referenceName: '',
+  referencePhone: '',
   specialInterestRate: '',
+  spouseFullName: '',
+  spousePhone: '',
   status: 'ACTIVE',
   ...overrides,
 });
@@ -43,6 +77,24 @@ describe('clientes lib', () => {
       personalAddressReference: 'Frente al parque', businessAddressReference: 'Al lado del mercado' });
     expect(toClientFormState(client({ personalAddressReference: null, businessAddressReference: null })))
       .toMatchObject({ personalAddressReference: '', businessAddressReference: '' });
+  });
+
+  it('clears spouse and guarantor details when checkboxes are disabled', () => {
+    const payload = toClientPayload(form({
+      guarantorFullName: 'Luis Perez',
+      guarantorPhone: '988777666',
+      hasGuarantor: false,
+      hasSpouse: false,
+      spouseFullName: 'Ana Perez',
+      spousePhone: '999888777',
+    }));
+
+    expect(payload).toMatchObject({
+      guarantorFullName: '',
+      guarantorPhone: '',
+      spouseFullName: '',
+      spousePhone: '',
+    });
   });
   it('filters clients by name and DNI', () => {
     const clients = [

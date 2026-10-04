@@ -1,20 +1,20 @@
 const { CreditsService } = require('../../src/credits/credits.service');
 
 const makeService = () => {
-  const schedule = { id: 'schedule', dueDate: new Date('2099-01-01Z'), installmentNo: 1, totalDue: 100, paidAmount: 0, penalty: 0, penaltyPaid: 0, penaltyAccruedDays: 0, status: 'PENDING' };
+  const schedule = { id: 'schedule', dueDate: new Date('2099-01-01Z'), installmentNo: 1, totalDue: 100, paidAmount: 0, penalty: 0, penaltyPaid: 0, penaltyAccruedDays: 0, status: 'PENDIENTE' };
   const receipts = new Map();
   const calls = [];
   const tx = {
     $queryRaw: jest.fn(async () => { calls.push('lock'); }),
     credit: {
-      findFirst: jest.fn(async () => { calls.push('read-credit'); return { id: 'credit', clientId: 'client', code: 'CRE-1', status: 'ACTIVE', paymentFrequency: 'MONTHLY', penaltyTerms: { method: 'SIMPLE', rate: 0.01, graceDays: 0, capRate: 0.1, fixedDailyAmount: 1 }, client: { dni: '12345678', firstName: 'Test', lastName: 'Client' } }; }),
+      findFirst: jest.fn(async () => { calls.push('read-credit'); return { id: 'credit', clientId: 'client', code: 'CRE-1', status: 'ACTIVO', paymentFrequency: 'MONTHLY', penaltyTerms: { method: 'SIMPLE', rate: 0.01, graceDays: 0, capRate: 0.1, fixedDailyAmount: 1 }, client: { dni: '12345678', firstName: 'Test', lastName: 'Client' } }; }),
       update: jest.fn(),
     },
     paymentReceipt: { findUnique: jest.fn(async ({ where }) => receipts.get(where.id)), create: jest.fn(async ({ data }) => { receipts.set(data.id, data); }) },
     paymentSchedule: {
       findMany: jest.fn(async () => [{ ...schedule }]),
       update: jest.fn(async ({ data }) => Object.assign(schedule, data)),
-      count: jest.fn(async () => schedule.status === 'PAID' ? 0 : 1),
+      count: jest.fn(async () => schedule.status === 'PAGADO' ? 0 : 1),
     },
     cashSession: { findFirst: jest.fn(async () => ({ id: 'cash', user: { fullName: 'Cashier' } })), findUnique: jest.fn(async () => ({ status: 'OPEN' })) },
     payment: { create: jest.fn(async () => ({ id: 'payment' })) },
@@ -53,7 +53,7 @@ test('receipt key cannot be reused for different amount', async () => {
 test('paying remaining balance closes the credit and records history', async () => {
   const { service, tx } = makeService();
   await service.payInstallments('credit', { ...input, amount: 100 });
-  expect(tx.credit.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'PAID' }) }));
+  expect(tx.credit.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'PAGADO' }) }));
   expect(tx.creditStatusHistory.create).toHaveBeenCalledTimes(1);
 });
 

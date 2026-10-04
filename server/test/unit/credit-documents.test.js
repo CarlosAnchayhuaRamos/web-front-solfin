@@ -1,7 +1,7 @@
 const { CreditsService } = require('../../src/credits/credits.service');
 
 const setup = () => {
-  const credit = { id: 'credit', clientId: 'client', status: 'APPROVED', paymentFrequency: 'WEEKLY', documentDate: new Date('2026-01-01Z'), generatedDocuments: { contract: true }, penaltyTerms: { method: 'SIMPLE', rate: 0.01, capRate: 0.1, fixedDailyAmount: 1, graceDays: 0 }, schedules: [{ id: 'one', installmentNo: 1 }, { id: 'two', installmentNo: 2 }] };
+  const credit = { id: 'credit', clientId: 'client', status: 'APROBADO', paymentFrequency: 'WEEKLY', documentDate: new Date('2026-01-01Z'), generatedDocuments: { contract: true }, penaltyTerms: { method: 'SIMPLE', rate: 0.01, capRate: 0.1, fixedDailyAmount: 1, graceDays: 0 }, schedules: [{ id: 'one', installmentNo: 1 }, { id: 'two', installmentNo: 2 }] };
   const tx = {
     $queryRaw: jest.fn(),
     credit: { findFirst: jest.fn(async () => credit), update: jest.fn(async ({ data }) => Object.assign(credit, data)) },

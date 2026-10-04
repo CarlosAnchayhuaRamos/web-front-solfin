@@ -29,7 +29,7 @@ export class CreditReversalsService {
         return { clientId: credit.clientId, voucher: saved.voucher };
       }
       const cancel = input.kind === 'CANCEL_CREDIT';
-      const allowed: CreditStatus[] = cancel ? ['APPROVED', 'ACTIVE', 'OVERDUE'] : ['ACTIVE', 'OVERDUE', 'PAID'];
+      const allowed: CreditStatus[] = cancel ? ['APROBADO', 'ACTIVO', 'VENCIDO'] : ['ACTIVO', 'VENCIDO', 'PAGADO'];
       if (!allowed.includes(credit.status)) throw new BadRequestException('El estado del credito no permite esta operacion');
       const payments = await tx.payment.findMany({ where: { creditId, reversedAt: null }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] });
       if (cancel && (payments.length || credit.schedules.some((s) => Number(s.paidAmount) > 0))) throw new BadRequestException('Revierta primero las cuotas pagadas antes de anular el credito');
@@ -57,11 +57,11 @@ export class CreditReversalsService {
         }
       }
       const now = new Date();
-      let status: CreditStatus = CreditStatus.CANCELED;
+      let status: CreditStatus = CreditStatus.CANCELADO;
       let remainingBalance = 0;
       const details: ReversalVoucher['details'] = [];
       if (cancel) {
-        await tx.paymentSchedule.updateMany({ where: { creditId }, data: { status: PaymentStatus.CANCELED } });
+        await tx.paymentSchedule.updateMany({ where: { creditId }, data: { status: PaymentStatus.CANCELADO } });
       }
       if (!cancel) {
         const terms = readPenaltyTerms(credit.penaltyTerms);
@@ -78,17 +78,17 @@ export class CreditReversalsService {
           const data = {
             paidAmount, penaltyPaid, paidAt: null, penalty: accruedPenalty(schedule, terms),
             penaltyAccruedDays: Math.max(schedule.penaltyAccruedDays, penaltyDays(schedule.dueDate, terms.graceDays)),
-            status: PaymentStatus.PENDING as PaymentStatus,
+            status: PaymentStatus.PENDIENTE as PaymentStatus,
           };
-          if (paidAmount > 0) data.status = PaymentStatus.PARTIAL;
-          if (schedule.dueDate < limaDate()) data.status = PaymentStatus.OVERDUE;
+          if (paidAmount > 0) data.status = PaymentStatus.PARCIAL;
+          if (schedule.dueDate < limaDate()) data.status = PaymentStatus.VENCIDO;
           await tx.paymentSchedule.update({ where: { id: schedule.id }, data });
           updated.push({ ...schedule, ...data });
           details.push({ installmentNo: schedule.installmentNo, amount: reverted,
             baseAmount: round(reverted - penaltyAmount), penaltyAmount });
         }
         remainingBalance = round(updated.reduce((n, s) => n + Number(s.totalDue) + accruedPenalty(s, terms) - Number(s.paidAmount), 0));
-        status = updated.some((s) => s.status !== PaymentStatus.PAID && s.dueDate < limaDate()) ? CreditStatus.OVERDUE : CreditStatus.ACTIVE;
+        status = updated.some((s) => s.status !== PaymentStatus.PAGADO && s.dueDate < limaDate()) ? CreditStatus.VENCIDO : CreditStatus.ACTIVO;
         details.sort((a, b) => a.installmentNo - b.installmentNo);
       }
       if (session) await tx.cashMovement.create({ data: {

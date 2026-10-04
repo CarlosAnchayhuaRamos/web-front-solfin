@@ -3,6 +3,12 @@ export interface Client {
   personalAddressReference: string | null;
   businessAddressReference: string | null;
   referencePhone: string | null;
+  hasSpouse: boolean;
+  spouseFullName: string | null;
+  spousePhone: string | null;
+  hasGuarantor: boolean;
+  guarantorFullName: string | null;
+  guarantorPhone: string | null;
   businessRuc: string | null;
   businessName: string | null;
   businessPhone: string | null;
@@ -36,6 +42,12 @@ export interface CreateClientInput {
   personalAddressReference: string;
   businessAddressReference: string;
   referencePhone: string;
+  hasSpouse: boolean;
+  spouseFullName: string;
+  spousePhone: string;
+  hasGuarantor: boolean;
+  guarantorFullName: string;
+  guarantorPhone: string;
   businessRuc: string;
   businessName: string;
   businessPhone: string;
@@ -79,9 +91,10 @@ export interface ClientCreditSchedule {
   installmentNo: number;
   interest: number;
   paidAmount: number;
+  paidAt: string | null;
   penalty: number;
   principal: number;
-  status: 'PENDING' | 'PARTIAL' | 'PAID' | 'OVERDUE' | 'CANCELED';
+  status: 'PENDIENTE' | 'PARCIAL' | 'PAGADO' | 'VENCIDO' | 'CANCELADO';
   totalDue: number;
 }
 
@@ -107,7 +120,7 @@ export interface ClientCredit {
   penaltyRate: number;
   principalAmount: number;
   schedules: ClientCreditSchedule[];
-  status: string;
+  status: 'BORRADOR' | 'PENDIENTE_APROBACION' | 'APROBADO' | 'RECHAZADO' | 'ACTIVO' | 'PAGADO' | 'VENCIDO' | 'CASTIGADO' | 'CANCELADO';
   totalAmount: number;
   type: string;
 }

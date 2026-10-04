@@ -5,11 +5,11 @@ const { CreditsController } = require('../../src/credits/credits.controller');
 const { createHmac } = require('crypto');
 
 const setting = { method: 'SIMPLE', rate: 0.01, capRate: 0.15, fixedDailyAmount: 2, graceDays: 0 };
-const initial = { dueDate: new Date('2026-01-01Z'), totalDue: 100, paidAmount: 0, penalty: 0, penaltyPaid: 0, penaltyAccruedDays: 0, status: 'PENDING' };
+const initial = { dueDate: new Date('2026-01-01Z'), totalDue: 100, paidAmount: 0, penalty: 0, penaltyPaid: 0, penaltyAccruedDays: 0, status: 'PENDIENTE' };
 
 test('partial payments preserve mora already accrued and charge only new days on new balance', () => {
   expect(accruedPenalty(initial, setting, new Date('2026-01-11Z'))).toBe(10);
-  const partial = { ...initial, paidAmount: 50, penalty: 10, penaltyAccruedDays: 10, status: 'PARTIAL' };
+  const partial = { ...initial, paidAmount: 50, penalty: 10, penaltyAccruedDays: 10, status: 'PARCIAL' };
   expect(accruedPenalty(partial, setting, new Date('2026-01-11Z'))).toBe(10);
   expect(accruedPenalty(partial, setting, new Date('2026-01-13Z'))).toBe(11);
   expect(accruedPenalty({ ...partial, paidAmount: 100 }, setting, new Date('2026-01-20Z'))).toBe(10);

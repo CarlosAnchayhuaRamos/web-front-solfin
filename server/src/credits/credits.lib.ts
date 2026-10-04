@@ -56,7 +56,7 @@ export const penaltyDays = (dueDate: Date, graceDays: number, today = limaDate()
 
 export const accruedPenalty = (schedule: PenaltyScheduleState, setting: PenaltyFrequencySetting, today = limaDate()) => {
   const previous = Number(schedule.penalty);
-  if (schedule.status === 'PAID' || schedule.status === 'CANCELED') return previous;
+  if (schedule.status === 'PAGADO' || schedule.status === 'CANCELADO') return previous;
   const newDays = Math.max(0, penaltyDays(schedule.dueDate, setting.graceDays, today) - schedule.penaltyAccruedDays);
   const basePaid = Number(schedule.paidAmount) - Number(schedule.penaltyPaid);
   const base = Math.max(0, Number(schedule.totalDue) - basePaid);

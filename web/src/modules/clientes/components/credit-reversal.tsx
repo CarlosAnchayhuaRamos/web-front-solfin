@@ -20,7 +20,7 @@ export function CreditReversal({ credit, sessions, busy, submit, close }: Credit
   const [pending, setPending] = useState<CreditReversalRequest | null>(null);
   const [error, setError] = useState<string | null>(null);
   const cancel = kind === 'CANCEL_CREDIT';
-  const amount = cancel ? (credit.status === 'APPROVED' ? 0 : credit.principalAmount) : credit.latestPaymentAmount ?? 0;
+  const amount = cancel ? (credit.status === 'APROBADO' ? 0 : credit.principalAmount) : credit.latestPaymentAmount ?? 0;
   const confirm = async () => {
     try {
       const input = pending ?? { kind, reason, requestId: crypto.randomUUID(), cashSessionId: sessionId || undefined, latestPaymentId: credit.latestPaymentId ?? undefined };

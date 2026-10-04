@@ -2,7 +2,8 @@ const { ClientsService } = require('../../src/clients/clients.service');
 
 test('address references are saved, returned and cleared independently of contact data', async () => {
   const record = { id: 'client-1', firstName: 'Ana', lastName: 'Ramos', birthDate: null,
-    specialInterestRate: null, _count: { credits: 0 }, credits: [] };
+    hasGuarantor: false, hasSpouse: false, guarantorFullName: null, guarantorPhone: null,
+    spouseFullName: null, spousePhone: null, specialInterestRate: null, _count: { credits: 0 }, credits: [] };
   const prisma = { client: {
     create: jest.fn(async ({ data }) => ({ ...record, ...data })),
     update: jest.fn(async ({ data }) => ({ ...record, ...data })),
@@ -21,6 +22,10 @@ test('address references are saved, returned and cleared independently of contac
   await service.update('client-1', legacyInput);
   expect(prisma.client.update.mock.calls[1][0].data.personalAddressReference).toBeUndefined();
   expect(prisma.client.update.mock.calls[1][0].data.businessAddressReference).toBeUndefined();
+  expect(prisma.client.update.mock.calls[1][0].data.hasSpouse).toBeUndefined();
+  expect(prisma.client.update.mock.calls[1][0].data.spouseFullName).toBeUndefined();
+  expect(prisma.client.update.mock.calls[1][0].data.hasGuarantor).toBeUndefined();
+  expect(prisma.client.update.mock.calls[1][0].data.guarantorFullName).toBeUndefined();
 });
 
 test('birth dates reject impossible dates instead of rolling into another month', () => {

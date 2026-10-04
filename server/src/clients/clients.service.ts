@@ -22,7 +22,7 @@ export class ClientsService {
         _count: { select: { credits: true } },
         credits: {
           select: { status: true, totalAmount: true },
-          where: { status: { in: ['ACTIVE', 'OVERDUE', 'DEFAULTED'] } },
+          where: { status: { in: ['ACTIVO', 'VENCIDO', 'CASTIGADO'] } },
         },
       },
       orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
@@ -54,7 +54,7 @@ export class ClientsService {
       });
       const totals = await tx.credit.groupBy({
         by: ['clientId'],
-        where: { clientId: { in: clients.map((client) => client.id) }, status: { in: ['ACTIVE', 'OVERDUE', 'DEFAULTED'] } },
+        where: { clientId: { in: clients.map((client) => client.id) }, status: { in: ['ACTIVO', 'VENCIDO', 'CASTIGADO'] } },
         _sum: { totalAmount: true }, _count: { _all: true },
       });
       const summary = new Map(totals.map((row) => [row.clientId, row]));
@@ -79,6 +79,12 @@ export class ClientsService {
           businessAddressReference: this.emptyToNull(input.businessAddressReference),
           referenceName: this.emptyToNull(input.referenceName),
           referencePhone: this.emptyToNull(input.referencePhone),
+          hasGuarantor: input.hasGuarantor ?? false,
+          guarantorFullName: input.hasGuarantor ? this.emptyToNull(input.guarantorFullName) : null,
+          guarantorPhone: input.hasGuarantor ? this.emptyToNull(input.guarantorPhone) : null,
+          hasSpouse: input.hasSpouse ?? false,
+          spouseFullName: input.hasSpouse ? this.emptyToNull(input.spouseFullName) : null,
+          spousePhone: input.hasSpouse ? this.emptyToNull(input.spousePhone) : null,
           businessRuc: this.emptyToNull(input.businessRuc),
           businessName: this.emptyToNull(input.businessName),
           businessPhone: this.emptyToNull(input.businessPhone),
@@ -126,6 +132,12 @@ export class ClientsService {
           businessAddressReference: input.businessAddressReference === undefined ? undefined : this.emptyToNull(input.businessAddressReference),
           referenceName: this.emptyToNull(input.referenceName),
           referencePhone: this.emptyToNull(input.referencePhone),
+          hasGuarantor: input.hasGuarantor,
+          guarantorFullName: input.hasGuarantor === undefined ? undefined : input.hasGuarantor ? this.emptyToNull(input.guarantorFullName) : null,
+          guarantorPhone: input.hasGuarantor === undefined ? undefined : input.hasGuarantor ? this.emptyToNull(input.guarantorPhone) : null,
+          hasSpouse: input.hasSpouse,
+          spouseFullName: input.hasSpouse === undefined ? undefined : input.hasSpouse ? this.emptyToNull(input.spouseFullName) : null,
+          spousePhone: input.hasSpouse === undefined ? undefined : input.hasSpouse ? this.emptyToNull(input.spousePhone) : null,
           businessRuc: this.emptyToNull(input.businessRuc),
           businessName: this.emptyToNull(input.businessName),
           businessPhone: this.emptyToNull(input.businessPhone),
@@ -152,7 +164,7 @@ export class ClientsService {
           _count: { select: { credits: true } },
           credits: {
             select: { status: true, totalAmount: true },
-            where: { status: { in: ['ACTIVE', 'OVERDUE', 'DEFAULTED'] } },
+            where: { status: { in: ['ACTIVO', 'VENCIDO', 'CASTIGADO'] } },
           },
         },
         where: {
@@ -233,6 +245,12 @@ export class ClientsService {
     businessAddressReference: string | null;
     referenceName: string | null;
     referencePhone: string | null;
+    hasSpouse: boolean;
+    spouseFullName: string | null;
+    spousePhone: string | null;
+    hasGuarantor: boolean;
+    guarantorFullName: string | null;
+    guarantorPhone: string | null;
     businessRuc: string | null;
     businessName: string | null;
     businessPhone: string | null;
@@ -265,6 +283,12 @@ export class ClientsService {
       personalAddressReference: client.personalAddressReference,
       businessAddressReference: client.businessAddressReference,
       referencePhone: client.referencePhone,
+      hasSpouse: client.hasSpouse,
+      spouseFullName: client.spouseFullName,
+      spousePhone: client.spousePhone,
+      hasGuarantor: client.hasGuarantor,
+      guarantorFullName: client.guarantorFullName,
+      guarantorPhone: client.guarantorPhone,
       businessRuc: client.businessRuc,
       businessName: client.businessName,
       businessPhone: client.businessPhone,

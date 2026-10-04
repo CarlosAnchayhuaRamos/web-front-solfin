@@ -5,6 +5,12 @@ export interface CreateClientInput {
   businessAddressReference?: string;
   referenceName?: string;
   referencePhone?: string;
+  hasSpouse?: boolean;
+  spouseFullName?: string;
+  spousePhone?: string;
+  hasGuarantor?: boolean;
+  guarantorFullName?: string;
+  guarantorPhone?: string;
   businessRuc?: string;
   businessName?: string;
   businessPhone?: string;
@@ -35,6 +41,12 @@ export interface ClientListItem {
   businessAddressReference: string | null;
   referenceName: string | null;
   referencePhone: string | null;
+  hasSpouse: boolean;
+  spouseFullName: string | null;
+  spousePhone: string | null;
+  hasGuarantor: boolean;
+  guarantorFullName: string | null;
+  guarantorPhone: string | null;
   businessRuc: string | null;
   businessName: string | null;
   businessPhone: string | null;

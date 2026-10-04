@@ -47,6 +47,12 @@ export const toClientFormState = (client: Client): ClientFormState => {
     personalAddressReference: client.personalAddressReference ?? '',
     businessAddressReference: client.businessAddressReference ?? '',
     referencePhone: client.referencePhone ?? '',
+    hasSpouse: client.hasSpouse,
+    spouseFullName: client.spouseFullName ?? '',
+    spousePhone: client.spousePhone ?? '',
+    hasGuarantor: client.hasGuarantor,
+    guarantorFullName: client.guarantorFullName ?? '',
+    guarantorPhone: client.guarantorPhone ?? '',
     businessRuc: client.businessRuc ?? '',
     businessName: client.businessName ?? '',
     businessPhone: client.businessPhone ?? '',
@@ -72,9 +78,13 @@ export const toClientPayload = (form: ClientFormState) => {
   return {
     ...form,
     birthDate: form.birthDate ? form.birthDate.split('-').reverse().join('-') : '',
+    guarantorFullName: form.hasGuarantor ? form.guarantorFullName : '',
+    guarantorPhone: form.hasGuarantor ? form.guarantorPhone : '',
     specialInterestRate: form.isSpecial && form.specialInterestRate.trim()
       ? toRateInputValue(form.specialInterestRate)
       : null,
+    spouseFullName: form.hasSpouse ? form.spouseFullName : '',
+    spousePhone: form.hasSpouse ? form.spousePhone : '',
   };
 };
 

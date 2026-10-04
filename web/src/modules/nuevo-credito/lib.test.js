@@ -14,7 +14,7 @@ const client = (overrides) => ({
   personalAddress: null,
   phone: '999999999',
   specialInterestRate: null,
-  status: 'ACTIVE',
+  status: 'ACTIVO',
   totalDebt: 0,
   ...overrides,
 });

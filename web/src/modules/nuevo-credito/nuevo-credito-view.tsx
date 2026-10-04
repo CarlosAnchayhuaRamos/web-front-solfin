@@ -117,7 +117,7 @@ export const NuevoCreditoView: React.FC = () => {
     setForm(initialCreditForm);
     setIsClientComboboxOpen(false);
     setSuccessMessage(
-      registered.status === 'PENDING_APPROVAL'
+      registered.status === 'PENDIENTE_APROBACION'
         ? 'Credito registrado y enviado a solicitudes. Cronograma pendiente de aprobacion.'
         : 'Credito registrado y aprobado correctamente',
     );
@@ -266,7 +266,7 @@ export const NuevoCreditoView: React.FC = () => {
                   min="0"
                   onChange={(event) => handleChange('interestRate', event.target.value)}
                   placeholder="0.000"
-                  step="0.001"
+                  step="1"
                   type="number"
                   value={form.interestRate}
                 />

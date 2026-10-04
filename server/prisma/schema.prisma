@@ -28,15 +28,15 @@ enum CreditType {
 }
 
 enum CreditStatus {
-  DRAFT
-  PENDING_APPROVAL
-  APPROVED
-  REJECTED
-  ACTIVE
-  PAID
-  OVERDUE
-  DEFAULTED
-  CANCELED
+  BORRADOR
+  PENDIENTE_APROBACION
+  APROBADO
+  RECHAZADO
+  ACTIVO
+  PAGADO
+  VENCIDO
+  CASTIGADO
+  CANCELADO
 }
 
 enum ApprovalStatus {
@@ -47,11 +47,11 @@ enum ApprovalStatus {
 }
 
 enum PaymentStatus {
-  PENDING
-  PARTIAL
-  PAID
-  OVERDUE
-  CANCELED
+  PENDIENTE
+  PARCIAL
+  PAGADO
+  VENCIDO
+  CANCELADO
 }
 
 enum PaymentFrequency {
@@ -203,6 +203,12 @@ model Client {
   businessAddressReference String?
   referenceName       String?
   referencePhone      String?
+  hasSpouse           Boolean      @default(false)
+  spouseFullName      String?
+  spousePhone         String?
+  hasGuarantor        Boolean      @default(false)
+  guarantorFullName   String?
+  guarantorPhone      String?
   businessRuc         String?
   businessName        String?
   businessPhone       String?
@@ -291,7 +297,7 @@ model Credit {
   approvedById              String?
   code                      String
   type                      CreditType
-  status                    CreditStatus              @default(DRAFT)
+  status                    CreditStatus              @default(BORRADOR)
   principalAmount           Decimal                   @db.Decimal(14, 2)
   interestRate              Decimal                   @db.Decimal(9, 5)
   interestCalculationMethod InterestCalculationMethod @default(CONTINUOUS)
@@ -384,7 +390,7 @@ model PaymentSchedule {
   penaltyAccruedDays Int       @default(0)
   totalDue      Decimal       @db.Decimal(14, 2)
   paidAmount    Decimal       @default(0) @db.Decimal(14, 2)
-  status        PaymentStatus @default(PENDING)
+  status        PaymentStatus @default(PENDIENTE)
   paidAt        DateTime?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt

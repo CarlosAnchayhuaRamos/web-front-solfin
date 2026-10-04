@@ -36,11 +36,11 @@ export class ApprovalRequestsService {
   }
 
   async approve(id: string, input: ReviewApprovalInput, reviewerId: string): Promise<ReviewApprovalResult> {
-    return this.review(id, ApprovalStatus.APPROVED, CreditStatus.APPROVED, input, reviewerId);
+    return this.review(id, ApprovalStatus.APPROVED, CreditStatus.APROBADO, input, reviewerId);
   }
 
   async reject(id: string, input: ReviewApprovalInput, reviewerId: string): Promise<ReviewApprovalResult> {
-    return this.review(id, ApprovalStatus.REJECTED, CreditStatus.REJECTED, input, reviewerId);
+    return this.review(id, ApprovalStatus.REJECTED, CreditStatus.RECHAZADO, input, reviewerId);
   }
 
   private async review(id: string, approvalStatus: ApprovalStatus, creditStatus: CreditStatus, input: ReviewApprovalInput, reviewerId: string) {
@@ -85,7 +85,7 @@ export class ApprovalRequestsService {
         data: {
           changedById: reviewer.id,
           creditId: request.creditId,
-          fromStatus: CreditStatus.PENDING_APPROVAL,
+          fromStatus: CreditStatus.PENDIENTE_APROBACION,
           notes: input.notes?.trim() || null,
           toStatus: creditStatus,
         },
@@ -173,7 +173,7 @@ export class ApprovalRequestsService {
       where: {
         approvalRequest: null,
         organizationId,
-        status: CreditStatus.PENDING_APPROVAL,
+        status: CreditStatus.PENDIENTE_APROBACION,
       },
     });
 
@@ -192,7 +192,7 @@ export class ApprovalRequestsService {
                 requestedById: credit.analystId,
               },
             },
-            status: CreditStatus.PENDING_APPROVAL,
+            status: CreditStatus.PENDIENTE_APROBACION,
           },
           where: { id: credit.id },
         }),
