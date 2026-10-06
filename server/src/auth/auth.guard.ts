@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from 'crypto';
-import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
+import { CanActivate, ExecutionContext, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import { UserRole } from '@prisma/client';
@@ -30,7 +30,7 @@ export class AuthGuard implements CanActivate {
     const allowedRoles = this.reflector.getAllAndOverride<UserRole[]>(ROLES_KEY, [context.getHandler(), context.getClass()]);
 
     if (allowedRoles?.length && !allowedRoles.includes(payload.role)) {
-      throw new UnauthorizedException('No autorizado');
+      throw new ForbiddenException('No autorizado');
     }
 
     request.user = payload;

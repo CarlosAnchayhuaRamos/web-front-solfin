@@ -19,7 +19,7 @@ export class ClientsController {
   }
 
   @Post()
-  @Roles(UserRole.ADMIN, UserRole.ANALYST)
+  @Roles(UserRole.ADMIN, UserRole.ANALYST, UserRole.CASHIER)
   create(@Body() input: CreateClientInput) {
     return this.clientsService.create(input);
   }
