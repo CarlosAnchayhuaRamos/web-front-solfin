@@ -42,6 +42,12 @@ export interface CreditContractData {
   approvedAt: string;
   approvedByName: string;
   clientAddress: string | null;
+  hasSpouse: boolean;
+  spouseFullName: string | null;
+  spousePhone: string | null;
+  hasGuarantor: boolean;
+  guarantorFullName: string | null;
+  guarantorPhone: string | null;
   clientDni: string;
   clientName: string;
   creditCode: string;

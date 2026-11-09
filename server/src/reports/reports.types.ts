@@ -3,6 +3,7 @@ export interface PortfolioReportClient {
   clientName: string;
   clientPhone: string;
   creditCount: number;
+  installmentAmount: number;
   nextDueDate: string | null;
   outstandingAmount: number;
   overdueAmount: number;

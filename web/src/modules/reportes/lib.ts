@@ -31,7 +31,7 @@ export const printPortfolioReport = (report: PortfolioReport) => {
           <td>${escapePrintHtml(client.clientName)}</td>
           <td>${escapePrintHtml(client.clientDni)}</td>
           <td>${escapePrintHtml(client.clientPhone)}</td>
-          <td>${client.creditCount}</td>
+          <td>${formatMoney(client.installmentAmount)}</td>
           <td>${formatMoney(client.principalAmount)}</td>
           <td>${formatMoney(client.outstandingAmount)}</td>
           <td>${formatMoney(client.overdueAmount)}</td>
@@ -78,7 +78,7 @@ export const printPortfolioReport = (report: PortfolioReport) => {
               <th>Cliente</th>
               <th>DNI</th>
               <th>Telefono</th>
-              <th>Creditos</th>
+              <th>Cuota</th>
               <th>Volumen credito</th>
               <th>Saldo cartera</th>
               <th>Mora</th>

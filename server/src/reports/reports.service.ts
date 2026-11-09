@@ -39,6 +39,7 @@ export class ReportsService {
         clientName: `${credit.client.firstName} ${credit.client.lastName}`.trim(),
         clientPhone: credit.client.phone,
         creditCount: 0,
+        installmentAmount: 0,
         nextDueDate: null,
         outstandingAmount: 0,
         overdueAmount: 0,
@@ -50,6 +51,7 @@ export class ReportsService {
       const nextDueDate = this.getNextDueDate(credit.schedules);
 
       currentClient.creditCount += 1;
+      currentClient.installmentAmount = this.roundMoney(currentClient.installmentAmount + Number(credit.installmentAmount));
       currentClient.outstandingAmount = this.roundMoney(currentClient.outstandingAmount + outstandingAmount);
       currentClient.overdueAmount = this.roundMoney(currentClient.overdueAmount + overdueAmount);
       currentClient.principalAmount = this.roundMoney(currentClient.principalAmount + Number(credit.principalAmount));

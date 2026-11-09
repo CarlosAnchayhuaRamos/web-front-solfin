@@ -46,6 +46,23 @@ export const getPenaltyClause = (terms: CreditContractData['penaltyTerms']) => {
   return `${simple} ${grace}`;
 };
 
+const getContractParticipants = (contract: CreditContractData) => [
+  ...(contract.hasGuarantor ? [{ role: 'AVAL', name: contract.guarantorFullName, phone: contract.guarantorPhone }] : []),
+  ...(contract.hasSpouse ? [{ role: 'CÓNYUGE', name: contract.spouseFullName, phone: contract.spousePhone }] : []),
+].map((person) => ({
+  ...person,
+  name: escapePrintHtml(person.name?.trim() || '______________________________'),
+  phone: escapePrintHtml(person.phone?.trim() || '________________'),
+}));
+
+const getParticipantSignatures = (contract: CreditContractData) => getContractParticipants(contract)
+  .map((person) => `<div class="signature"><strong>${person.role}</strong><br />${person.name}<br />Teléfono: ${person.phone}<br />DNI: ________________</div>`)
+  .join('');
+
+const getParticipantDetails = (contract: CreditContractData) => getContractParticipants(contract)
+  .map((person) => `<p><strong>${person.role}:</strong> ${person.name}. Teléfono: ${person.phone}.</p>`)
+  .join('');
+
 export const printCreditContract = (printWindow: Window, contract: CreditContractData) => {
   const amount = formatContractMoney(contract.principalAmount);
   const amountWords = `${numberToSpanishWords(Math.floor(contract.principalAmount))} Y ${String(Math.round((contract.principalAmount % 1) * 100)).padStart(2, '0')}/100 SOLES`;
@@ -60,6 +77,9 @@ export const printCreditContract = (printWindow: Window, contract: CreditContrac
   const paymentFrequencyLabel = getPaymentFrequencyLabel(contract.paymentFrequency);
   const interestCalculationMethodLabel = getInterestCalculationMethodLabel(contract.interestCalculationMethod);
   const staticClauses = contractClauses.map(([title, body]) => `<h2>${title}</h2><p>${body}</p>`).join('');
+  const participants = getContractParticipants(contract);
+  const spouse = participants.find((person) => person.role === 'CÓNYUGE');
+  const guarantor = participants.find((person) => person.role === 'AVAL');
 
   printWindow.document.open();
   printWindow.document.write(`
@@ -89,24 +109,23 @@ export const printCreditContract = (printWindow: Window, contract: CreditContrac
           <p><strong>Frecuencia:</strong> ${paymentFrequencyLabel}</p>
           <p><strong>Total:</strong> ${amount}</p>
         </div>
-        <p>Conste por el presente documento el contrato de préstamo de dinero que se suscribe por duplicado, celebrado de una parte por <strong>${contractCompany.name}</strong>, con RUC ${contractCompany.ruc}, con domicilio en ${contractCompany.address}, a quien en adelante se denominará LA EMPRESA, debidamente representada por su Gerente General, la Sra. ${contractCompany.legalRepresentative}, identificada con DNI Nº ${contractCompany.legalRepresentativeDni}; y, de la otra parte, el(la) cliente(a), señor(a) <strong>${clientName}</strong>, identificado(a) con DNI Nº <strong>${clientDni}</strong>, de estado civil ____________________, señalando domicilio en <strong>${clientAddress}</strong>, a quien en adelante se denominará EL CLIENTE; y el(la) cónyuge o conviviente de EL CLIENTE, señor(a) ______________________________.</p>
+        <p>Conste por el presente documento el contrato de préstamo de dinero que se suscribe por duplicado, celebrado de una parte por <strong>${contractCompany.name}</strong>, con RUC ${contractCompany.ruc}, con domicilio en ${contractCompany.address}, a quien en adelante se denominará LA EMPRESA, debidamente representada por su Gerente General, la Sra. ${contractCompany.legalRepresentative}, identificada con DNI Nº ${contractCompany.legalRepresentativeDni}; y, de la otra parte, el(la) cliente(a), señor(a) <strong>${clientName}</strong>, identificado(a) con DNI Nº <strong>${clientDni}</strong>, de estado civil ____________________, señalando domicilio en <strong>${clientAddress}</strong>, a quien en adelante se denominará EL CLIENTE${spouse ? `; y el(la) cónyuge o conviviente de EL CLIENTE, señor(a) <strong>${spouse.name}</strong>` : ''}.</p>
         <h2>PRIMERO</h2>
         <p>LA EMPRESA, atendiendo a la solicitud de EL CLIENTE y a la información proporcionada por este, conviene en otorgarle un crédito ascendente a la suma de <strong>${amountWords}</strong> (${amount}), el mismo que será abonado a su cuenta _______________ en LA EMPRESA, a su entera conformidad, y se obliga a devolverlo en los términos pactados.</p>
         <h2>SEGUNDO</h2>
         <p>El préstamo otorgado generará un interés compensatorio bajo modalidad <strong>${interestCalculationMethodLabel}</strong>, con tasa de cálculo mensual de <strong>${(contract.interestRate * 100).toFixed(3)}%</strong>, conforme al cronograma anexo. ${penaltyClause}</p>
+        ${getParticipantDetails(contract)}
         <h2>TERCERO</h2>
         <p>EL CLIENTE se compromete a devolver el préstamo otorgado en <strong>${contract.installmentCount} cuotas</strong> de frecuencia <strong>${paymentFrequencyLabel}</strong>, establecidas en el cronograma de pagos entregado a EL CLIENTE, el cual se anexa al presente.</p>
         ${staticClauses}
-        <h2>CLÁUSULA ADICIONAL</h2>
-        <p>Interviene en el presente contrato el(la) cónyuge o conviviente de EL CLIENTE, identificado(a) con DNI Nº ___________, con domicilio en _______________________________________, constituyéndose en co-deudor(a) de EL CLIENTE y asumiendo en forma solidaria todas las obligaciones hasta la total cancelación de la deuda, renunciando a su derecho de excusión.</p>
-        <h2>SEGUNDA CLÁUSULA ADICIONAL</h2>
-        <p>Intervienen asimismo los señores(as) ________________________________________, identificado(a) con DNI Nº ___________, con domicilio en __________________________________________________; ________________________________________, identificado(a) con DNI Nº ___________, con domicilio en __________________________________________________; __________________, identificado(a) con DNI Nº ___________, con domicilio en __________________________________________________________________; e __________________, identificado(a) con DNI Nº ___________, con domicilio en __________________________________________________________________; para constituirse como garantes solidarios de EL CLIENTE, asumiendo en forma solidaria todas las obligaciones hasta la cancelación total de la deuda, renunciando a su derecho de excusión.</p>
+        ${spouse ? `<h2>CLÁUSULA ADICIONAL</h2>
+        <p>Interviene en el presente contrato el(la) cónyuge o conviviente de EL CLIENTE, <strong>${spouse.name}</strong>, teléfono ${spouse.phone}, identificado(a) con DNI Nº ___________, con domicilio en _______________________________________, constituyéndose en co-deudor(a) de EL CLIENTE y asumiendo en forma solidaria todas las obligaciones hasta la total cancelación de la deuda, renunciando a su derecho de excusión.</p>` : ''}
+        ${guarantor ? `<h2>SEGUNDA CLÁUSULA ADICIONAL</h2>
+        <p>Interviene asimismo el(la) señor(a) <strong>${guarantor.name}</strong>, teléfono ${guarantor.phone}, identificado(a) con DNI Nº ___________, con domicilio en __________________________________________________, para constituirse como garante solidario de EL CLIENTE, asumiendo en forma solidaria todas las obligaciones hasta la cancelación total de la deuda, renunciando a su derecho de excusión.</p>` : ''}
         <p>Se suscribe el presente contrato por duplicado, en la ciudad de AYACUCHO, el ${dateText}.</p>
         <section class="signatures">
           <div class="signature"><strong>CLIENTE</strong><br />${clientName}<br />DNI ${clientDni}</div>
-          <div class="signature"><strong>AVAL</strong></div>
-          <div class="signature"><strong>CÓNYUGE</strong></div>
-          <div class="signature"><strong>AVAL</strong></div>
+          ${getParticipantSignatures(contract)}
           <div class="signature"><strong>LA EMPRESA</strong><br />${contractCompany.legalRepresentative}</div>
           <div class="signature"><strong>ASESOR</strong><br />${advisorName}</div>
         </section>
@@ -212,8 +231,9 @@ export const printDisbursementRequest = (printWindow: Window, contract: CreditCo
           h1 { font-size: 20px; margin: 24px 0; text-align: center; }
           p { line-height: 1.6; margin: 10px 0; }
           .details { border: 1px solid #9ca3af; display: grid; gap: 8px; margin: 24px 0; padding: 16px; }
-          .signatures { display: grid; gap: 56px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 90px; text-align: center; }
-          .signature { border-top: 1px solid #111827; padding-top: 6px; }
+          .signatures { display: grid; gap: 56px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 64px; text-align: center; break-inside: avoid; page-break-inside: avoid; }
+          .signature { border-top: 1px solid #111827; padding-top: 6px; overflow-wrap: anywhere; }
+          .details p { overflow-wrap: anywhere; }
           ${getPrintBrandStyles()}
         </style>
       </head>
@@ -226,6 +246,7 @@ export const printDisbursementRequest = (printWindow: Window, contract: CreditCo
           <p><strong>Cliente:</strong> ${clientName}</p>
           <p><strong>DNI:</strong> ${clientDni}</p>
           <p><strong>Monto a desembolsar:</strong> ${formatContractMoney(contract.principalAmount)}</p>
+          ${getParticipantDetails(contract)}
           <p><strong>Fecha de aprobacion:</strong> ${new Date(contract.approvedAt).toLocaleString('es-PE')}</p>
           <p><strong>Aprobado por:</strong> ${approvedByName}</p>
           <p><strong>Asesor:</strong> ${advisorName}</p>
@@ -233,6 +254,7 @@ export const printDisbursementRequest = (printWindow: Window, contract: CreditCo
         <section class="signatures">
           <div class="signature"><strong>CLIENTE</strong><br />${clientName}<br />DNI ${clientDni}</div>
           <div class="signature"><strong>RESPONSABLE DE DESEMBOLSO</strong></div>
+          ${getParticipantSignatures(contract)}
         </section>
       </body>
     </html>
